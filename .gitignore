@@ -94,6 +94,9 @@ dist
 tmp/
 temp/
 
+# Uploaded files (persistent on VPS, not tracked in git)
+apps/api/uploads/
+
 # Editor directories and files
 .vscode/
 .idea/
@@ -112,7 +115,6 @@ Thumbs.db
 
 # Prisma
 prisma/migrations/
-.env.example
 
 # Vite
 .vite/

@@ -87,8 +87,10 @@ app.use(cors({
       'http://localhost:3000',
       'http://localhost:5174',
       'https://ecole-le-souverain-web.vercel.app',
-      'https://votre-app.vercel.app', // Keep for backward compatibility
-      process.env.CORS_ORIGIN, // Allow custom origin from env
+      'https://votre-app.vercel.app',
+      'https://lesouverain-larabia.com',
+      'https://www.lesouverain-larabia.com',
+      process.env.CORS_ORIGIN,
     ].filter(Boolean); // Remove undefined values
     
     // Allow requests with no origin (like mobile apps or curl requests)
