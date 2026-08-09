@@ -1,0 +1,646 @@
+import { useState, useEffect } from 'react';
+import {
+  Typography,
+  Table,
+  Tag,
+  Select,
+  Row,
+  Col,
+  App,
+  Button,
+  message,
+  Alert,
+} from 'antd';
+import { Calendar, FileDown, FileText, Trophy, Users } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '../lib/api';
+import dayjs from 'dayjs';
+import { PageHeader } from '../components/ui/page-header';
+import { GlassCard } from '../components/ui/glass-card';
+import { EmptyState } from '../components/ui/empty-state';
+
+const { Text } = Typography;
+
+interface SubjectAverage {
+  subjectId: string;
+  subjectName: string;
+  coefficient: number;
+  average: number;
+  rank: number;
+  grades: Array<{
+    evaluationType: string;
+    note: number;
+    maxNote: number;
+  }>;
+}
+
+interface StudentCompleteAverage {
+  studentId: string;
+  studentNumber: string;
+  studentName: string;
+  gender: string;
+  subjectAverages: Map<string, SubjectAverage>;
+  generalAverage: number;
+  finalRank: number;
+}
+
+export default function CompleteAveragesPage() {
+  const { message: messageApi } = App.useApp();
+
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>('');
+  const [selectedSemester, setSelectedSemester] = useState<string>('');
+  const [selectedClass, setSelectedClass] = useState<string>('');
+
+  // Fetch academic years
+  const { data: academicYearsData } = useQuery({
+    queryKey: ['academic-years-all'],
+    queryFn: async () => {
+      const response = await api.get('/academic-years');
+      return response.data.data || [];
+    },
+  });
+
+  // Set default academic year to current year only on initial load
+  useEffect(() => {
+    if (academicYearsData && academicYearsData.length > 0 && !selectedAcademicYear) {
+      const currentYear = academicYearsData.find((year: any) => year.isCurrent);
+      if (currentYear) {
+        setSelectedAcademicYear(currentYear.id);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [academicYearsData]);
+
+  // Fetch semesters
+  const { data: semestersData } = useQuery({
+    queryKey: ['semesters', selectedAcademicYear],
+    queryFn: async () => {
+      if (!selectedAcademicYear) return [];
+      const response = await api.get(`/semesters?academicYearId=${selectedAcademicYear}`);
+      return response.data.data || [];
+    },
+    enabled: !!selectedAcademicYear,
+  });
+
+  // Determine active semester based on dates
+  const getActiveSemester = () => {
+    if (!semestersData || semestersData.length === 0) return null;
+    
+    const now = dayjs();
+    const sortedSemesters = [...semestersData].sort((a: any, b: any) => {
+      const dateA = dayjs(a.start_date);
+      const dateB = dayjs(b.start_date);
+      return dateA.isBefore(dateB) ? -1 : 1;
+    });
+
+    for (const semester of sortedSemesters) {
+      const startDate = dayjs(semester.start_date);
+      const endDate = dayjs(semester.end_date);
+      if (now.isAfter(startDate) || now.isSame(startDate, 'day')) {
+        if (now.isBefore(endDate) || now.isSame(endDate, 'day')) {
+          return semester;
+        }
+      }
+    }
+
+    return sortedSemesters[0] || null;
+  };
+
+  const activeSemester = getActiveSemester();
+
+  // Set default semester to active semester only on initial load
+  useEffect(() => {
+    // Only set the active semester if no semester is currently selected
+    // This allows users to freely select any semester after initial load
+    if (activeSemester && !selectedSemester) {
+      setSelectedSemester(activeSemester.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSemester]);
+
+  // Reset semester when academic year changes
+  useEffect(() => {
+    if (selectedAcademicYear && semestersData) {
+      // Check if current selected semester belongs to the new academic year
+      const semesterExists = semestersData.some((sem: any) => sem.id === selectedSemester);
+      if (!semesterExists) {
+        // Reset to active semester or first available
+        if (activeSemester) {
+          setSelectedSemester(activeSemester.id);
+        } else if (semestersData.length > 0) {
+          setSelectedSemester(semestersData[0].id);
+        } else {
+          setSelectedSemester('');
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAcademicYear, semestersData]);
+
+  // Fetch classes
+  const { data: classesData } = useQuery({
+    queryKey: ['classes-all'],
+    queryFn: async () => {
+      const response = await api.get('/school-classes');
+      return response.data.data || [];
+    },
+  });
+
+  // Fetch class subjects with coefficients
+  const { data: classSubjectsData } = useQuery({
+    queryKey: ['class-subjects', selectedClass],
+    queryFn: async () => {
+      if (!selectedClass) return [];
+      const response = await api.get(`/coefficients/class/${selectedClass}`);
+      return response.data.data || [];
+    },
+    enabled: !!selectedClass,
+  });
+
+  // Fetch students in selected class
+  const { data: studentsData } = useQuery({
+    queryKey: ['students-class', selectedClass],
+    queryFn: async () => {
+      if (!selectedClass) return [];
+      const response = await api.get(`/students?classId=${selectedClass}`);
+      return response.data.data || [];
+    },
+    enabled: !!selectedClass,
+  });
+
+  // Fetch all grades for the class, semester, and academic year
+  const { data: gradesData, isLoading: gradesLoading } = useQuery({
+    queryKey: ['complete-averages-grades', selectedClass, selectedSemester, selectedAcademicYear],
+    queryFn: async () => {
+      if (!selectedClass || !selectedSemester || !selectedAcademicYear) return [];
+      const response = await api.get(
+        `/grades?classId=${selectedClass}&semesterId=${selectedSemester}&academicYearId=${selectedAcademicYear}`
+      );
+      return response.data.data || [];
+    },
+    enabled: !!selectedClass && !!selectedSemester && !!selectedAcademicYear,
+  });
+
+  // Calculate averages for each student
+  const calculateCompleteAverages = (): StudentCompleteAverage[] => {
+    if (!studentsData || !gradesData || !classSubjectsData || studentsData.length === 0) return [];
+
+    const studentAverages: StudentCompleteAverage[] = [];
+
+    // For each student
+    studentsData.forEach((student: any) => {
+      const subjectAveragesMap = new Map<string, SubjectAverage>();
+
+      // For each subject in the class
+      classSubjectsData.forEach((classSubject: any) => {
+        const subjectId = classSubject.subject.id;
+        const subjectName = classSubject.subject.name;
+        const coefficient = classSubject.coefficient || 1;
+
+        // Get all grades for this student in this subject
+        const studentGrades = gradesData.filter((grade: any) => 
+          grade.student_id === student.id && 
+          grade.subject_id === subjectId
+        );
+
+        if (studentGrades.length === 0) {
+          // No grades for this subject
+          subjectAveragesMap.set(subjectId, {
+            subjectId,
+            subjectName,
+            coefficient,
+            average: 0,
+            rank: 0,
+            grades: [],
+          });
+          return;
+        }
+
+        // Prepare grades for calculation
+        const grades = studentGrades.map((grade: any) => ({
+          evaluationType: grade.evaluationType?.name || 'N/A',
+          note: Number(grade.note),
+          maxNote: grade.max_note || 20,
+          createdAt: grade.created_at || new Date().toISOString(),
+        }));
+
+        // Sort grades by creation date
+        grades.sort((a: any, b: any) => {
+          const dateA = new Date(a.createdAt).getTime();
+          const dateB = new Date(b.createdAt).getTime();
+          return dateA - dateB;
+        });
+
+        // Calculate weighted average for this subject
+        let totalWeighted = 0;
+        let totalCoefficients = 0;
+
+        grades.forEach((grade: any) => {
+          let normalizedNote: number;
+          let coefficient: number;
+          
+          if (grade.maxNote === 10) {
+            normalizedNote = (grade.note / grade.maxNote) * 20;
+            coefficient = 0.5;
+          } else {
+            normalizedNote = grade.note;
+            coefficient = 1;
+          }
+          
+          totalWeighted += normalizedNote * coefficient;
+          totalCoefficients += coefficient;
+        });
+
+        const average = totalCoefficients > 0 ? totalWeighted / totalCoefficients : 0;
+
+        subjectAveragesMap.set(subjectId, {
+          subjectId,
+          subjectName,
+          coefficient,
+          average: Math.round(average * 100) / 100,
+          rank: 0, // Will be set later
+          grades,
+        });
+      });
+
+      // Calculate General Average (MG)
+      let totalWeightedMG = 0;
+      let totalCoefficientsMG = 0;
+
+      subjectAveragesMap.forEach((subjectAvg) => {
+        if (subjectAvg.average > 0) {
+          totalWeightedMG += subjectAvg.average * subjectAvg.coefficient;
+          totalCoefficientsMG += subjectAvg.coefficient;
+        }
+      });
+
+      const generalAverage = totalCoefficientsMG > 0 
+        ? Math.round((totalWeightedMG / totalCoefficientsMG) * 100) / 100 
+        : 0;
+
+      studentAverages.push({
+        studentId: student.id,
+        studentNumber: student.studentNumber || '',
+        studentName: `${student.firstName || ''} ${student.lastName || ''}`.trim(),
+        gender: student.gender || '',
+        subjectAverages: subjectAveragesMap,
+        generalAverage,
+        finalRank: 0, // Will be set later
+      });
+    });
+
+    // Calculate ranks for each subject
+    classSubjectsData.forEach((classSubject: any) => {
+      const subjectId = classSubject.subject.id;
+      
+      // Sort students by average in this subject (descending)
+      const sortedBySubject = [...studentAverages].sort((a, b) => {
+        const avgA = a.subjectAverages.get(subjectId)?.average || 0;
+        const avgB = b.subjectAverages.get(subjectId)?.average || 0;
+        return avgB - avgA;
+      });
+
+      // Assign ranks
+      sortedBySubject.forEach((student, index) => {
+        const subjectAvg = student.subjectAverages.get(subjectId);
+        if (subjectAvg) {
+          subjectAvg.rank = index + 1;
+        }
+      });
+    });
+
+    // Calculate final ranks (by General Average)
+    const sortedByMG = [...studentAverages].sort((a, b) => b.generalAverage - a.generalAverage);
+    sortedByMG.forEach((student, index) => {
+      student.finalRank = index + 1;
+    });
+
+    return sortedByMG;
+  };
+
+  const studentAverages = calculateCompleteAverages();
+
+  // Export to PDF
+  const handleExportPDF = async () => {
+    if (!selectedClass || !selectedSemester || !selectedAcademicYear) {
+      messageApi.warning('Veuillez sélectionner une classe, un trimestre et une année scolaire');
+      return;
+    }
+
+    try {
+      const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:4001/api';
+      const pdfUrlEndpoint = `${apiBaseUrl}/grades/complete-averages/pdf?classId=${selectedClass}&semesterId=${selectedSemester}&academicYearId=${selectedAcademicYear}`;
+      
+      const token = localStorage.getItem('token');
+      const response = await fetch(pdfUrlEndpoint, {
+        headers: token ? {
+          'Authorization': `Bearer ${token}`,
+        } : {},
+      });
+      
+      if (response.ok) {
+        // Create blob URL for the PDF
+        const blob = await response.blob();
+        const pdfUrl = window.URL.createObjectURL(blob);
+        
+        // Open PDF in new tab
+        window.open(pdfUrl, '_blank');
+        messageApi.success('PDF généré avec succès !');
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        messageApi.error(errorData.error || 'Erreur lors de la génération du PDF');
+      }
+    } catch (error: any) {
+      console.error('Error generating PDF:', error);
+      messageApi.error('Erreur lors de la génération du PDF');
+    }
+  };
+
+  // Generate student bulletin
+  const handleGenerateBulletin = async (studentId: string) => {
+    if (!selectedClass || !selectedSemester || !selectedAcademicYear) {
+      messageApi.warning('Veuillez sélectionner une classe, un trimestre et une année scolaire');
+      return;
+    }
+
+    try {
+      const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:4001/api';
+      const pdfUrlEndpoint = `${apiBaseUrl}/grades/student-bulletin/pdf?studentId=${studentId}&classId=${selectedClass}&semesterId=${selectedSemester}&academicYearId=${selectedAcademicYear}`;
+      
+      const token = localStorage.getItem('token');
+      const response = await fetch(pdfUrlEndpoint, {
+        headers: token ? {
+          'Authorization': `Bearer ${token}`,
+        } : {},
+      });
+      
+      if (response.ok) {
+        // Create blob URL for the PDF
+        const blob = await response.blob();
+        const pdfUrl = window.URL.createObjectURL(blob);
+        
+        // Open PDF in new tab
+        window.open(pdfUrl, '_blank');
+        messageApi.success('Bulletin généré avec succès !');
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        messageApi.error(errorData.error || 'Erreur lors de la génération du bulletin');
+      }
+    } catch (error: any) {
+      console.error('Error generating bulletin:', error);
+      messageApi.error('Erreur lors de la génération du bulletin');
+    }
+  };
+
+  // Build table columns
+  const buildColumns = () => {
+    const baseColumns = [
+      {
+        title: 'Action',
+        key: 'action',
+        width: 100,
+        align: 'center' as const,
+        render: (_: any, record: StudentCompleteAverage) => (
+          <Button
+            type="primary"
+            icon={<FileText className="h-4 w-4" aria-hidden="true" />}
+            size="small"
+            onClick={() => handleGenerateBulletin(record.studentId)}
+          >
+            Bulletin
+          </Button>
+        ),
+      },
+      {
+        title: 'Rang',
+        key: 'finalRank',
+        width: 80,
+        align: 'center' as const,
+        render: (_: any, record: StudentCompleteAverage) => (
+          <Text strong>{record.finalRank}</Text>
+        ),
+      },
+      {
+        title: 'Nom et Prénom',
+        key: 'studentName',
+        width: 200,
+        render: (_: any, record: StudentCompleteAverage) => (
+          <Text strong style={{ fontSize: '15px' }}>{record.studentName}</Text>
+        ),
+      },
+      {
+        title: 'Sexe',
+        key: 'gender',
+        width: 80,
+        render: (_: any, record: StudentCompleteAverage) => {
+          const gender = record.gender;
+          if (gender === 'M' || gender === 'MALE' || gender === 'Masculin') {
+            return 'M';
+          } else if (gender === 'F' || gender === 'FEMALE' || gender === 'Féminin') {
+            return 'F';
+          }
+          return gender || '-';
+        },
+      },
+    ];
+
+    // Add columns for each subject
+    const subjectColumns: any[] = [];
+    if (classSubjectsData && classSubjectsData.length > 0) {
+      classSubjectsData.forEach((classSubject: any) => {
+        const subjectId = classSubject.subject.id;
+        const subjectName = classSubject.subject.name;
+
+        subjectColumns.push({
+          title: subjectName,
+          key: `subject_${subjectId}`,
+          width: 200,
+          align: 'center' as const,
+          children: [
+            {
+              title: 'Moy.',
+              key: `avg_${subjectId}`,
+              width: 100,
+              align: 'center' as const,
+              render: (_: any, record: StudentCompleteAverage) => {
+                const subjectAvg = record.subjectAverages.get(subjectId);
+                if (!subjectAvg || subjectAvg.average === 0) {
+                  return <Text type="secondary">-</Text>;
+                }
+                return <Text strong>{subjectAvg.average.toFixed(2)}</Text>;
+              },
+            },
+            {
+              title: 'Rang',
+              key: `rank_${subjectId}`,
+              width: 80,
+              align: 'center' as const,
+              render: (_: any, record: StudentCompleteAverage) => {
+                const subjectAvg = record.subjectAverages.get(subjectId);
+                if (!subjectAvg || subjectAvg.average === 0) {
+                  return <Text type="secondary">-</Text>;
+                }
+                return <Text strong>{subjectAvg.rank}</Text>;
+              },
+            },
+          ],
+        });
+      });
+    }
+
+    // Add MG column
+    const finalColumns = [
+      {
+        title: 'MG',
+        key: 'generalAverage',
+        width: 100,
+        align: 'center' as const,
+        render: (_: any, record: StudentCompleteAverage) => (
+          <Text strong style={{ fontSize: '15px' }}>
+            {record.generalAverage.toFixed(2)}
+          </Text>
+        ),
+      },
+    ];
+
+    return [...baseColumns, ...subjectColumns, ...finalColumns];
+  };
+
+  const columns = buildColumns();
+
+  return (
+    <div className="animate-fade-in mx-auto max-w-7xl space-y-8">
+      <PageHeader
+        title="Moyennes Complètes par Classe"
+        description="Consultez les moyennes complètes des élèves par matière avec calcul de la Moyenne Générale (MG)"
+      />
+
+      <GlassCard variant="glass" styles={{ body: { padding: '24px' } }}>
+        {activeSemester && (
+          <Alert
+            type="info"
+            showIcon
+            className="mb-4"
+            message={
+              <span>
+                <Calendar className="mr-2 inline h-4 w-4" aria-hidden="true" />
+                <Text strong>Trimestre Actif : {activeSemester.name}</Text>
+                <Text type="secondary" className="ml-3">
+                  ({dayjs(activeSemester.start_date).format('DD/MM/YYYY')} - {dayjs(activeSemester.end_date).format('DD/MM/YYYY')})
+                </Text>
+              </span>
+            }
+          />
+        )}
+
+        <Row gutter={16}>
+          <Col xs={24} sm={12} md={8}>
+            <Text strong className="mb-2 block">Année Scolaire</Text>
+            <Select
+              value={selectedAcademicYear}
+              onChange={setSelectedAcademicYear}
+              placeholder="Sélectionnez une année scolaire"
+              style={{ width: '100%' }}
+              showSearch
+              optionFilterProp="children"
+              allowClear
+            >
+              {academicYearsData?.map((year: any) => (
+                <Select.Option key={year.id} value={year.id}>
+                  {year.name} {year.isCurrent && '(En cours)'}
+                </Select.Option>
+              ))}
+            </Select>
+          </Col>
+          <Col xs={24} sm={12} md={8}>
+            <Text strong className="mb-2 block">Classe</Text>
+            <Select
+              value={selectedClass}
+              onChange={setSelectedClass}
+              placeholder="Sélectionnez une classe"
+              style={{ width: '100%' }}
+              showSearch
+              optionFilterProp="children"
+              allowClear
+            >
+              {classesData?.map((cls: any) => (
+                <Select.Option key={cls.id} value={cls.id}>
+                  {cls.name}
+                </Select.Option>
+              ))}
+            </Select>
+          </Col>
+          <Col xs={24} sm={12} md={8}>
+            <Text strong className="mb-2 block">Trimestre</Text>
+            <Select
+              value={selectedSemester}
+              onChange={setSelectedSemester}
+              placeholder="Sélectionnez un trimestre"
+              style={{ width: '100%' }}
+              showSearch
+              optionFilterProp="children"
+              allowClear
+              disabled={!selectedAcademicYear}
+            >
+              {semestersData?.map((semester: any) => (
+                <Select.Option key={semester.id} value={semester.id}>
+                  {semester.name} {semester.id === activeSemester?.id && '(Actif)'}
+                </Select.Option>
+              ))}
+            </Select>
+          </Col>
+        </Row>
+      </GlassCard>
+
+      {selectedClass && selectedSemester && selectedAcademicYear ? (
+        <GlassCard variant="glass" styles={{ body: { padding: '24px' } }}>
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <h3 className="flex items-center gap-2 text-lg font-semibold text-foreground">
+                <Users className="h-5 w-5 text-role-primary" aria-hidden="true" />
+                {classesData?.find((c: any) => c.id === selectedClass)?.name || 'Classe'}
+                {' — '}
+                {semestersData?.find((s: any) => s.id === selectedSemester)?.name || 'Trimestre'}
+              </h3>
+              <Text type="secondary" className="mt-2 block">
+                Moyennes par matière avec calcul de la Moyenne Générale (MG)
+              </Text>
+            </div>
+            <Button
+              type="primary"
+              icon={<FileDown className="h-4 w-4" aria-hidden="true" />}
+              onClick={handleExportPDF}
+              disabled={studentAverages.length === 0}
+            >
+              Exporter en PDF
+            </Button>
+          </div>
+
+          {studentAverages.length > 0 ? (
+            <Table
+              columns={columns}
+              dataSource={studentAverages}
+              rowKey="studentId"
+              loading={gradesLoading}
+              pagination={false}
+              scroll={{ x: 'max-content' }}
+            />
+          ) : (
+            <EmptyState
+              icon={Trophy}
+              title="Aucune moyenne disponible"
+              description="Aucune moyenne pour cette classe et ce trimestre."
+            />
+          )}
+        </GlassCard>
+      ) : (
+        <EmptyState
+          icon={Trophy}
+          title="Sélectionnez les filtres"
+          description="Veuillez sélectionner une année, une classe et un trimestre pour afficher les moyennes."
+        />
+      )}
+    </div>
+  );
+}
+

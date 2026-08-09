@@ -1,0 +1,250 @@
+import { useState } from 'react';
+import {
+  Button,
+  Modal,
+  Form,
+  Input,
+  Space,
+  message,
+  Row,
+  Col,
+  Spin,
+  Alert,
+} from 'antd';
+import { BookOpen, Plus, Search } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '../lib/api';
+import { PageHeader } from '../components/ui/page-header';
+import { GlassCard } from '../components/ui/glass-card';
+import { EmptyState } from '../components/ui/empty-state';
+import { ResourceCard } from '../components/pedagogy/ResourceCard';
+import { PaginationBar } from '../components/pedagogy/PaginationBar';
+
+export default function SchoolSubjectsPage() {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingSubject, setEditingSubject] = useState<any>(null);
+  const [searchText, setSearchText] = useState<string>('');
+  const [form] = Form.useForm();
+  const queryClient = useQueryClient();
+  const [pagination, setPagination] = useState({
+    current: 1,
+    pageSize: 12,
+  });
+
+  // Fetch subjects
+  const { data: subjectsData, isLoading, error } = useQuery({
+    queryKey: ['school-subjects', searchText],
+    queryFn: async () => {
+      const response = await api.get('/school-subjects');
+      return response.data;
+    },
+  });
+
+  // Filter subjects based on search
+  const filteredSubjects = subjectsData?.data
+    ? subjectsData.data.filter((subject: any) => {
+        if (!searchText) return true;
+        const search = searchText.toLowerCase();
+        return (
+          subject.name?.toLowerCase().includes(search) ||
+          subject.code?.toLowerCase().includes(search)
+        );
+      })
+    : [];
+
+  // Create mutation
+  const createMutation = useMutation({
+    mutationFn: async (values: any) => {
+      const response = await api.post('/school-subjects', values);
+      return response.data;
+    },
+    onSuccess: (data) => {
+      message.success('Matière créée avec succès !');
+      setIsModalOpen(false);
+      form.resetFields();
+      setEditingSubject(null);
+      queryClient.invalidateQueries({ queryKey: ['school-subjects'] });
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.error || 'Erreur lors de la création');
+    },
+  });
+
+  // Update mutation
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, ...values }: any) => {
+      const response = await api.patch(`/school-subjects/${id}`, values);
+      return response.data;
+    },
+    onSuccess: () => {
+      message.success('Matière modifiée avec succès !');
+      setIsModalOpen(false);
+      form.resetFields();
+      setEditingSubject(null);
+      queryClient.invalidateQueries({ queryKey: ['school-subjects'] });
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.error || 'Erreur');
+    },
+  });
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await api.delete(`/school-subjects/${id}`);
+      return response.data;
+    },
+    onSuccess: () => {
+      message.success('Matière supprimée avec succès !');
+      queryClient.invalidateQueries({ queryKey: ['school-subjects'] });
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.error || 'Impossible de supprimer');
+    },
+  });
+
+  const handleCancel = () => {
+    setIsModalOpen(false);
+    setEditingSubject(null);
+    form.resetFields();
+  };
+
+  const handleEdit = (subject: any) => {
+    setEditingSubject(subject);
+    form.setFieldsValue(subject);
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = async () => {
+    try {
+      const values = await form.validateFields();
+
+      if (editingSubject) {
+        updateMutation.mutate({ id: editingSubject.id, ...values });
+      } else {
+        createMutation.mutate(values);
+      }
+    } catch (error) {
+      console.error('Validation error:', error);
+    }
+  };
+
+
+  return (
+    <div className="animate-fade-in mx-auto max-w-7xl space-y-8">
+      <PageHeader
+        title="Matières"
+        description="Gestion des matières et disciplines enseignées"
+        action={
+          <Button
+            type="primary"
+            icon={<Plus className="h-4 w-4" aria-hidden="true" />}
+            onClick={() => setIsModalOpen(true)}
+            size="large"
+          >
+            Nouvelle Matière
+          </Button>
+        }
+      />
+
+      <GlassCard variant="glass" styles={{ body: { padding: '24px' } }}>
+        <Row gutter={16} style={{ marginBottom: 16 }}>
+          <Col span={12}>
+            <Input
+              placeholder="Rechercher par nom ou code..."
+              prefix={<Search className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
+              value={searchText}
+              onChange={(e) => {
+                setSearchText(e.target.value);
+                setPagination({ ...pagination, current: 1 });
+              }}
+              allowClear
+            />
+          </Col>
+        </Row>
+
+        {error && (
+          <Alert
+            type="error"
+            showIcon
+            className="mb-4"
+            message={`Erreur lors du chargement des matières: ${error instanceof Error ? error.message : 'Erreur inconnue'}`}
+          />
+        )}
+
+        {isLoading ? (
+          <div className="flex justify-center py-16">
+            <Spin size="large" />
+          </div>
+        ) : filteredSubjects && filteredSubjects.length > 0 ? (
+          <>
+            <Row gutter={[24, 24]}>
+              {filteredSubjects
+                .slice((pagination.current - 1) * pagination.pageSize, pagination.current * pagination.pageSize)
+                .map((subject: any) => (
+                  <ResourceCard
+                    key={subject.id}
+                    title={subject.name}
+                    label="Matière"
+                    icon={BookOpen}
+                    onEdit={() => handleEdit(subject)}
+                    onDelete={() => deleteMutation.mutate(subject.id)}
+                    colProps={{ xs: 24, sm: 12, lg: 12, xl: 12 }}
+                  />
+                ))}
+            </Row>
+            <PaginationBar
+              current={pagination.current}
+              pageSize={pagination.pageSize}
+              total={filteredSubjects.length}
+              onChange={(page) => setPagination({ ...pagination, current: page })}
+              onPageSizeChange={(size) => setPagination({ current: 1, pageSize: size })}
+            />
+          </>
+        ) : (
+          <EmptyState
+            icon={BookOpen}
+            title={
+              subjectsData === undefined && !isLoading
+                ? 'Aucune donnée disponible'
+                : 'Aucune matière trouvée'
+            }
+            description="Créez une nouvelle matière pour commencer."
+            actionLabel="Nouvelle Matière"
+            onAction={() => setIsModalOpen(true)}
+          />
+        )}
+      </GlassCard>
+
+      <Modal
+        title={
+          <Space>
+            <BookOpen className="h-5 w-5 text-role-primary" aria-hidden="true" />
+            <span>{editingSubject ? 'Modifier la matière' : 'Nouvelle matière'}</span>
+          </Space>
+        }
+        open={isModalOpen}
+        onOk={handleSubmit}
+        onCancel={handleCancel}
+        okText={editingSubject ? 'Mettre à jour' : 'Créer'}
+        cancelText="Annuler"
+        confirmLoading={createMutation.isPending || updateMutation.isPending}
+        width={500}
+      >
+        <Form form={form} layout="vertical" style={{ marginTop: '24px' }}>
+          <Form.Item
+            name="name"
+            label="Nom de la matière"
+            rules={[
+              { required: true, message: 'Le nom est requis' },
+              { min: 2, message: 'Le nom doit contenir au moins 2 caractères' },
+            ]}
+          >
+            <Input placeholder="Ex: Mathématiques, Français, Anglais..." />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  );
+}
+

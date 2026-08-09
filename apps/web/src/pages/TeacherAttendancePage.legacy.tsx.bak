@@ -1,0 +1,917 @@
+import { useState, useEffect } from 'react';
+import {
+  Card,
+  Typography,
+  Empty,
+  Tag,
+  Row,
+  Col,
+  Button,
+  Modal,
+  Form,
+  Select,
+  DatePicker,
+  Table,
+  Space,
+  message,
+  App,
+  Popconfirm,
+  Input,
+} from 'antd';
+import {
+  TeamOutlined,
+  BookOutlined,
+  CalendarOutlined,
+  ClockCircleOutlined,
+  CheckCircleOutlined,
+  UserDeleteOutlined,
+  SearchOutlined,
+} from '@ant-design/icons';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '../lib/api';
+import { useAuthStore } from '../lib/store';
+import dayjs from 'dayjs';
+
+const { Title, Text } = Typography;
+
+export default function TeacherAttendancePage() {
+  const { message: messageApi } = App.useApp();
+  const { user } = useAuthStore();
+  const [form] = Form.useForm();
+  const queryClient = useQueryClient();
+  
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState<any>(null);
+  const [selectedClass, setSelectedClass] = useState<string>('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedSubject, setSelectedSubject] = useState<string>('');
+  const [selectedDate, setSelectedDate] = useState<any>(dayjs());
+  const [timetableHours, setTimetableHours] = useState<number>(1);
+  const [selectedHoursCount, setSelectedHoursCount] = useState<number>(1);
+  const [searchText, setSearchText] = useState<string>('');
+  const [filterClassId, setFilterClassId] = useState<string>('');
+  const [filterSemesterId, setFilterSemesterId] = useState<string>('');
+  const [pagination, setPagination] = useState({
+    current: 1,
+    pageSize: 10,
+  });
+
+  // Fetch academic years
+  const { data: academicYearsData } = useQuery({
+    queryKey: ['academic-years-all'],
+    queryFn: async () => {
+      const response = await api.get('/academic-years');
+      return response.data.data || [];
+    },
+  });
+
+  // Get current academic year as default
+  useEffect(() => {
+    if (academicYearsData && academicYearsData.length > 0 && !selectedAcademicYear) {
+      const currentYear = academicYearsData.find((year: any) => year.isCurrent);
+      if (currentYear) {
+        setSelectedAcademicYear(currentYear);
+      }
+    }
+  }, [academicYearsData, selectedAcademicYear]);
+
+  // Fetch teacher info
+  const { data: teacherInfo } = useQuery({
+    queryKey: ['teacher-info'],
+    queryFn: async () => {
+      if (user?.role === 'TEACHER') {
+        const response = await api.get('/teachers/me/info');
+        return response.data.data;
+      }
+      return null;
+    },
+    enabled: user?.role === 'TEACHER',
+  });
+
+  // Fetch teacher classes
+  const { data: teacherClassesData } = useQuery({
+    queryKey: ['teacher-classes', teacherInfo?.id, selectedAcademicYear?.id],
+    queryFn: async () => {
+      if (!teacherInfo?.id || !selectedAcademicYear?.id) return [];
+      const response = await api.get(
+        `/student-absences/teacher/${teacherInfo.id}/classes?academicYearId=${selectedAcademicYear.id}`
+      );
+      return response.data.data || [];
+    },
+    enabled: !!teacherInfo?.id && !!selectedAcademicYear?.id && user?.role === 'TEACHER',
+  });
+
+  // Fetch teacher's full timetable to find next course
+  const { data: teacherFullTimetableData } = useQuery({
+    queryKey: ['teacher-full-timetable', teacherInfo?.id, selectedAcademicYear?.id],
+    queryFn: async () => {
+      if (!teacherInfo?.id || !selectedAcademicYear?.id) return [];
+      const response = await api.get(`/teachers/me/timetable?academicYearId=${selectedAcademicYear.id}`);
+      return response.data.data || [];
+    },
+    enabled: !!teacherInfo?.id && !!selectedAcademicYear?.id && user?.role === 'TEACHER',
+  });
+
+  // Fetch students for selected class
+  const { data: studentsData } = useQuery({
+    queryKey: ['students-by-class', selectedClass],
+    queryFn: async () => {
+      if (!selectedClass) return [];
+      const response = await api.get(`/students?classId=${selectedClass}&limit=1000`);
+      return response.data.data || [];
+    },
+    enabled: !!selectedClass,
+  });
+
+  // Fetch timetable for selected class/subject
+  const { data: timetableData } = useQuery({
+    queryKey: ['timetable-for-class', teacherInfo?.id, selectedClass, selectedSubject, selectedAcademicYear?.id],
+    queryFn: async () => {
+      if (!teacherInfo?.id || !selectedClass || !selectedSubject || !selectedAcademicYear?.id) return [];
+      const response = await api.get(
+        `/student-absences/timetable?teacherId=${teacherInfo.id}&classId=${selectedClass}&subjectId=${selectedSubject}&academicYearId=${selectedAcademicYear.id}`
+      );
+      return response.data.data || [];
+    },
+    enabled: !!teacherInfo?.id && !!selectedClass && !!selectedSubject && !!selectedAcademicYear?.id,
+  });
+
+  // Get current day
+  const getCurrentDay = () => {
+    const today = new Date().getDay();
+    const dayMap: { [key: number]: string } = {
+      1: 'MONDAY',
+      2: 'TUESDAY',
+      3: 'WEDNESDAY',
+      4: 'THURSDAY',
+      5: 'FRIDAY',
+      6: 'SATURDAY',
+      0: 'SUNDAY',
+    };
+    return dayMap[today];
+  };
+
+  const currentDay = getCurrentDay();
+
+  // Get current time in HH:MM format
+  const getCurrentTime = () => {
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+
+  // Find next course for a specific class
+  const findNextCourseForClass = (classId: string) => {
+    if (!teacherFullTimetableData || teacherFullTimetableData.length === 0) return null;
+    
+    // Filter timetable for the specific class
+    const classTimetable = teacherFullTimetableData.filter((course: any) => 
+      course.class?.id === classId
+    );
+    
+    if (classTimetable.length === 0) return null;
+    
+    const currentTime = getCurrentTime();
+    const dayOrder = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+    const currentDayIndex = dayOrder.indexOf(currentDay);
+    
+    // First, check for today's future courses
+    const todayFutureCourses = classTimetable.filter((course: any) => {
+      return course.day_of_week === currentDay && course.start_time >= currentTime;
+    });
+    
+    if (todayFutureCourses.length > 0) {
+      // Return the closest one
+      return todayFutureCourses.sort((a: any, b: any) => {
+        return a.start_time.localeCompare(b.start_time);
+      })[0];
+    }
+    
+    // If no future courses today, find the next day's first course
+    for (let i = 1; i <= 7; i++) {
+      const nextDayIndex = (currentDayIndex + i) % 7;
+      const nextDay = dayOrder[nextDayIndex];
+      
+      const nextDayCourses = classTimetable.filter((course: any) => {
+        return course.day_of_week === nextDay;
+      });
+      
+      if (nextDayCourses.length > 0) {
+        // Return the first course of that day (sorted by time)
+        return nextDayCourses.sort((a: any, b: any) => {
+          return a.start_time.localeCompare(b.start_time);
+        })[0];
+      }
+    }
+    
+    return null;
+  };
+
+  // Find next course for highlighting and sorting (for current selected subject)
+  const findNextCourse = () => {
+    if (!timetableData || timetableData.length === 0) return null;
+    
+    const currentTime = getCurrentTime();
+    const dayOrder = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+    const currentDayIndex = dayOrder.indexOf(currentDay);
+    
+    // First, check for today's future courses
+    const todayFutureCourses = timetableData.filter((course: any) => {
+      return course.day_of_week === currentDay && course.start_time >= currentTime;
+    });
+    
+    if (todayFutureCourses.length > 0) {
+      // Return the closest one
+      return todayFutureCourses.sort((a: any, b: any) => {
+        return a.start_time.localeCompare(b.start_time);
+      })[0];
+    }
+    
+    // If no future courses today, find the next day's first course
+    for (let i = 1; i <= 7; i++) {
+      const nextDayIndex = (currentDayIndex + i) % 7;
+      const nextDay = dayOrder[nextDayIndex];
+      
+      const nextDayCourses = timetableData.filter((course: any) => {
+        return course.day_of_week === nextDay;
+      });
+      
+      if (nextDayCourses.length > 0) {
+        // Return the first course of that day (sorted by time)
+        return nextDayCourses.sort((a: any, b: any) => {
+          return a.start_time.localeCompare(b.start_time);
+        })[0];
+      }
+    }
+    
+    return null;
+  };
+
+  const nextCourse = findNextCourse();
+
+  // Filter and sort timetable data (today's courses first, then next course)
+  const getFilteredTimetableData = () => {
+    if (!timetableData || timetableData.length === 0) return [];
+
+    const currentTime = getCurrentTime();
+    const dayOrder = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+
+    // Sort timetable: today's courses first, then by day and time
+    const sorted = [...timetableData].sort((a: any, b: any) => {
+      const isTodayA = a.day_of_week === currentDay;
+      const isTodayB = b.day_of_week === currentDay;
+      const isNextA = nextCourse && a.day_of_week === nextCourse.day_of_week && a.start_time === nextCourse.start_time;
+      const isNextB = nextCourse && b.day_of_week === nextCourse.day_of_week && b.start_time === nextCourse.start_time;
+
+      // If one is today and the other is not, today comes first
+      if (isTodayA && !isTodayB) return -1;
+      if (!isTodayA && isTodayB) return 1;
+
+      // If one is the next course and the other is not, next course comes first (after today's)
+      if (!isTodayA && !isTodayB) {
+        if (isNextA && !isNextB) return -1;
+        if (!isNextA && isNextB) return 1;
+      }
+
+      // If both are today, sort by time (closest to current time first)
+      if (isTodayA && isTodayB) {
+        const timeA = a.start_time || '';
+        const timeB = b.start_time || '';
+
+        // If times are close, sort by which is next (future times first)
+        if (timeA >= currentTime && timeB < currentTime) return -1;
+        if (timeA < currentTime && timeB >= currentTime) return 1;
+
+        return timeA.localeCompare(timeB);
+      }
+
+      // If neither is today, sort by day order
+      const dayA = dayOrder.indexOf(a.day_of_week);
+      const dayB = dayOrder.indexOf(b.day_of_week);
+
+      if (dayA !== dayB) {
+        return dayA - dayB;
+      }
+
+      // If same day, sort by start time
+      const timeA = a.start_time || '';
+      const timeB = b.start_time || '';
+      return timeA.localeCompare(timeB);
+    });
+
+    return sorted;
+  };
+
+  const filteredTimetableData = getFilteredTimetableData();
+
+  // Get only the next course and following courses based on selected hours
+  const getDisplayedTimetableData = () => {
+    if (!filteredTimetableData || filteredTimetableData.length === 0) return [];
+    
+    // Always show at least the next course
+    // Then show additional courses based on selectedHoursCount
+    return filteredTimetableData.slice(0, selectedHoursCount);
+  };
+
+  const displayedTimetableData = getDisplayedTimetableData();
+
+  // Calculate total hours from timetable (number of time slots)
+  useEffect(() => {
+    if (filteredTimetableData && filteredTimetableData.length > 0) {
+      // Each timetable entry represents one hour slot
+      // So if there are 3 entries, we have 3 hours available
+      setTimetableHours(filteredTimetableData.length);
+    } else {
+      setTimetableHours(1);
+    }
+  }, [filteredTimetableData]);
+
+  // Reset selected hours count when subject changes
+  useEffect(() => {
+    setSelectedHoursCount(1);
+    form.setFieldsValue({ hoursAbsent: 1 });
+  }, [selectedSubject]);
+
+  // Fetch current semester
+  const { data: semestersData } = useQuery({
+    queryKey: ['semesters', selectedAcademicYear?.id],
+    queryFn: async () => {
+      if (!selectedAcademicYear?.id) return [];
+      const response = await api.get(`/semesters?academicYearId=${selectedAcademicYear.id}`);
+      return response.data.data || [];
+    },
+    enabled: !!selectedAcademicYear?.id,
+  });
+
+  // Get active semester
+  const getActiveSemester = () => {
+    if (!semestersData || semestersData.length === 0) return null;
+    
+    const now = dayjs();
+    const sortedSemesters = [...semestersData].sort((a: any, b: any) => {
+      const dateA = dayjs(a.start_date);
+      const dateB = dayjs(b.start_date);
+      return dateA.isBefore(dateB) ? -1 : 1;
+    });
+
+    for (const semester of sortedSemesters) {
+      const startDate = dayjs(semester.start_date);
+      const endDate = dayjs(semester.end_date);
+      if (now.isAfter(startDate) || now.isSame(startDate, 'day')) {
+        if (now.isBefore(endDate) || now.isSame(endDate, 'day')) {
+          return semester;
+        }
+      }
+    }
+
+    return sortedSemesters[sortedSemesters.length - 1] || null;
+  };
+
+  const activeSemester = getActiveSemester();
+
+  // Fetch subjects for selected class
+  const { data: assignmentsData } = useQuery({
+    queryKey: ['teacher-assignments', teacherInfo?.id, selectedAcademicYear?.id, selectedClass],
+    queryFn: async () => {
+      if (!teacherInfo?.id || !selectedAcademicYear?.id || !selectedClass) return [];
+      const response = await api.get(
+        `/grades/teacher/${teacherInfo.id}/assignments?academicYearId=${selectedAcademicYear.id}`
+      );
+      return response.data.data || [];
+    },
+    enabled: !!teacherInfo?.id && !!selectedAcademicYear?.id && !!selectedClass,
+  });
+
+  const availableSubjects = assignmentsData?.filter((assignment: any) => 
+    assignment.class?.id === selectedClass
+  ).map((assignment: any) => assignment.subject) || [];
+  const uniqueSubjects = Array.from(
+    new Map(availableSubjects.map((subject: any) => [subject.id, subject])).values()
+  );
+
+  // Fetch absences history
+  const { data: absencesHistoryData, isLoading: absencesLoading } = useQuery({
+    queryKey: ['absences-history', teacherInfo?.id, selectedAcademicYear?.id, filterClassId, filterSemesterId],
+    queryFn: async () => {
+      if (!teacherInfo?.id || !selectedAcademicYear?.id) return [];
+      let url = `/student-absences?teacherId=${teacherInfo.id}&academicYearId=${selectedAcademicYear.id}`;
+      if (filterClassId) {
+        url += `&classId=${filterClassId}`;
+      }
+      if (filterSemesterId) {
+        url += `&semesterId=${filterSemesterId}`;
+      }
+      const response = await api.get(url);
+      return response.data.data || [];
+    },
+    enabled: !!teacherInfo?.id && !!selectedAcademicYear?.id,
+  });
+
+  // Create absence mutation
+  const createMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const response = await api.post('/student-absences', data);
+      return response.data;
+    },
+    onSuccess: () => {
+      messageApi.success('Absence enregistrée avec succès');
+      queryClient.invalidateQueries({ queryKey: ['absences-history'] });
+      handleCloseModal();
+    },
+    onError: (error: any) => {
+      const errorMessage = error.response?.data?.error || 'Erreur lors de l\'enregistrement de l\'absence';
+      messageApi.error(errorMessage);
+    },
+  });
+
+  // Delete absence mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await api.delete(`/student-absences/${id}`);
+      return response.data;
+    },
+    onSuccess: () => {
+      messageApi.success('Absence supprimée avec succès');
+      queryClient.invalidateQueries({ queryKey: ['absences-history'] });
+    },
+    onError: (error: any) => {
+      const errorMessage = error.response?.data?.error || 'Erreur lors de la suppression de l\'absence';
+      messageApi.error(errorMessage);
+    },
+  });
+
+  const handleOpenModal = (classId: string) => {
+    setSelectedClass(classId);
+    setIsModalOpen(true);
+    setSelectedHoursCount(1);
+    
+    // Find next course for this class
+    const nextCourse = findNextCourseForClass(classId);
+    
+    form.resetFields();
+    const formValues: any = {
+      date: dayjs(),
+      hoursAbsent: 1,
+    };
+    
+    // If next course found, pre-select the subject
+    if (nextCourse && nextCourse.subject?.id) {
+      formValues.subjectId = nextCourse.subject.id;
+      setSelectedSubject(nextCourse.subject.id);
+    }
+    
+    form.setFieldsValue(formValues);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedClass('');
+    setSelectedSubject('');
+    form.resetFields();
+  };
+
+  const handleSubmit = async () => {
+    try {
+      const values = await form.validateFields();
+      
+      if (!activeSemester) {
+        messageApi.error('Aucun trimestre actif trouvé');
+        return;
+      }
+
+      if (!selectedSubject) {
+        messageApi.error('Veuillez sélectionner une matière');
+        return;
+      }
+
+      // Create absence for each selected student
+      const promises = values.students.map((studentId: string) =>
+        createMutation.mutateAsync({
+          academicYearId: selectedAcademicYear.id,
+          studentId,
+          semesterId: activeSemester.id,
+          subjectId: selectedSubject,
+          teacherId: teacherInfo.id,
+          hoursAbsent: values.hoursAbsent,
+          date: values.date.format('YYYY-MM-DD'),
+        })
+      );
+
+      await Promise.all(promises);
+    } catch (error) {
+      console.error('Validation failed:', error);
+    }
+  };
+
+  // Filter absences history
+  const filteredAbsencesHistory = absencesHistoryData?.filter((absence: any) => {
+    const matchesSearch = !searchText || 
+      `${absence.student?.firstName || ''} ${absence.student?.lastName || ''}`.toLowerCase().includes(searchText.toLowerCase());
+    return matchesSearch;
+  }) || [];
+
+  // History table columns (same style as InscriptionsPage)
+  const historyColumns = [
+    {
+      title: 'Date',
+      dataIndex: 'date',
+      key: 'date',
+      width: 120,
+      render: (date: string) => dayjs(date).format('DD/MM/YYYY'),
+    },
+    {
+      title: 'Élève',
+      key: 'student',
+      width: 200,
+      render: (_: any, record: any) => (
+        <div>
+          <strong>{`${record.student?.firstName || ''} ${record.student?.lastName || ''}`.trim()}</strong>
+        </div>
+      ),
+    },
+    {
+      title: 'Classe',
+      key: 'class',
+      width: 100,
+      render: (_: any, record: any) => (
+        <Tag color="blue">{record.class?.name || record.student?.class?.name || '-'}</Tag>
+      ),
+    },
+    {
+      title: 'Trimestre',
+      key: 'semester',
+      width: 120,
+      render: (_: any, record: any) => record.semester?.name || '-',
+    },
+    {
+      title: 'Matière',
+      key: 'subject',
+      width: 150,
+      render: (_: any, record: any) => record.subject?.name || '-',
+    },
+    {
+      title: 'Heures d\'absence',
+      dataIndex: 'hours_absent',
+      key: 'hours_absent',
+      width: 120,
+      align: 'center' as const,
+      render: (hours: number) => `${hours}h`,
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      width: 100,
+      align: 'center' as const,
+      render: (_: any, record: any) => (
+        <Popconfirm
+          title="Supprimer cette absence ?"
+          description="Cette action est irréversible."
+          onConfirm={() => deleteMutation.mutate(record.id)}
+          okText="Supprimer"
+          cancelText="Annuler"
+          okButtonProps={{ 
+            danger: true,
+            className: 'modern-button-primary',
+          }}
+        >
+          <Button
+            type="link"
+            size="small"
+            danger
+            icon={<UserDeleteOutlined />}
+            style={{ 
+              padding: '2px 4px',
+              color: '#ff4d4f',
+            }}
+            title="Supprimer"
+            className="hover:bg-red-50"
+          >
+            Supprimer
+          </Button>
+        </Popconfirm>
+      ),
+    },
+  ];
+
+  return (
+    <div style={{ padding: '0' }} className="fade-in">
+      {/* Header */}
+      <div className="page-header" style={{ marginBottom: '24px' }}>
+        <Title level={2} style={{ margin: 0, color: 'rgb(var(--role-primary))' }}>
+          <TeamOutlined style={{ marginRight: '12px' }} />
+          Liste de Présence
+        </Title>
+        <p style={{ margin: '8px 0 0 0', color: '#666', fontSize: '16px' }}>
+          Marquez les absences des élèves par classe et matière
+        </p>
+      </div>
+
+      {/* Classes Section */}
+      <Card className="modern-card" style={{ marginBottom: '24px' }}>
+        <Title level={4} style={{ marginBottom: '16px' }}>
+          Mes Classes
+        </Title>
+        {teacherClassesData && teacherClassesData.length > 0 ? (
+          <Row gutter={[16, 16]}>
+            {teacherClassesData.map((classItem: any) => (
+              <Col xs={24} sm={12} md={8} lg={6} key={classItem.id}>
+                <Card
+                  hoverable
+                  style={{
+                    borderRadius: '12px',
+                    textAlign: 'center',
+                    height: '100%',
+                  }}
+                  bodyStyle={{ padding: '24px' }}
+                >
+                  <TeamOutlined style={{ fontSize: '48px', color: 'rgb(var(--role-primary))', marginBottom: '16px' }} />
+                  <Title level={4} style={{ margin: '0 0 16px 0' }}>
+                    {classItem.name}
+                  </Title>
+                  <Button
+                    type="primary"
+                    icon={<CheckCircleOutlined />}
+                    onClick={() => handleOpenModal(classItem.id)}
+                    style={{ 
+                      width: '100%', 
+                      borderRadius: '8px',
+                      background: 'var(--role-gradient)',
+                      borderColor: 'transparent',
+                      boxShadow: '0 2px 8px rgba(36, 174, 106, 0.3), 0 1px 4px rgba(233, 103, 2, 0.2)',
+                      transition: 'all 0.3s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'var(--role-gradient)';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(36, 174, 106, 0.4), 0 2px 8px rgba(233, 103, 2, 0.3)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'var(--role-gradient)';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(36, 174, 106, 0.3), 0 1px 4px rgba(233, 103, 2, 0.2)';
+                    }}
+                  >
+                    Marquer les Absences
+                  </Button>
+                </Card>
+              </Col>
+            ))}
+          </Row>
+        ) : (
+          <Empty
+            description="Aucune classe assignée"
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          />
+        )}
+      </Card>
+
+      {/* History Section */}
+      <Card className="modern-card">
+        <Title level={4} style={{ marginBottom: '16px' }}>
+          Historique des Absences
+        </Title>
+        
+        {/* Filters */}
+        <Row gutter={16} style={{ marginBottom: 16 }}>
+          <Col xs={24} sm={12} md={8}>
+            <Input
+              placeholder="Rechercher par nom d'élève..."
+              prefix={<SearchOutlined style={{ color: '#E96702' }} />}
+              value={searchText}
+              onChange={(e) => {
+                setSearchText(e.target.value);
+                setPagination({ ...pagination, current: 1 });
+              }}
+              allowClear
+              className="modern-input-wrapper"
+              style={{ borderRadius: '8px' }}
+            />
+          </Col>
+          <Col xs={24} sm={12} md={8}>
+            <Select
+              placeholder="Filtrer par classe"
+              value={filterClassId}
+              onChange={(value) => {
+                setFilterClassId(value);
+                setPagination({ ...pagination, current: 1 });
+              }}
+              allowClear
+              style={{ width: '100%', borderRadius: '8px' }}
+            >
+              {teacherClassesData?.map((classItem: any) => (
+                <Select.Option key={classItem.id} value={classItem.id}>
+                  {classItem.name}
+                </Select.Option>
+              ))}
+            </Select>
+          </Col>
+          <Col xs={24} sm={12} md={8}>
+            <Select
+              placeholder="Filtrer par trimestre"
+              value={filterSemesterId}
+              onChange={(value) => {
+                setFilterSemesterId(value);
+                setPagination({ ...pagination, current: 1 });
+              }}
+              allowClear
+              style={{ width: '100%', borderRadius: '8px' }}
+            >
+              {semestersData?.map((semester: any) => (
+                <Select.Option key={semester.id} value={semester.id}>
+                  {semester.name}
+                </Select.Option>
+              ))}
+            </Select>
+          </Col>
+        </Row>
+
+        {/* Table */}
+        <div className="modern-table">
+          <Table
+            columns={historyColumns}
+            dataSource={filteredAbsencesHistory}
+            loading={absencesLoading}
+            rowKey="id"
+            scroll={{ x: 1200 }}
+            pagination={{
+              current: pagination.current,
+              pageSize: pagination.pageSize,
+              showSizeChanger: true,
+              pageSizeOptions: ['10', '20', '50', '100'],
+              showTotal: (total, range) => `${range[0]}-${range[1]} sur ${total} absences`,
+              onChange: (page, pageSize) => {
+                setPagination({
+                  current: page,
+                  pageSize: pageSize || pagination.pageSize,
+                });
+              },
+              onShowSizeChange: (current, size) => {
+                setPagination({
+                  current: 1,
+                  pageSize: size,
+                });
+              },
+            }}
+          />
+        </div>
+      </Card>
+
+      {/* Modal for marking absences */}
+      <Modal
+        title={
+          <Space>
+            <TeamOutlined style={{ 
+              color: 'rgb(var(--role-primary))',
+              background: 'var(--role-gradient)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }} />
+            <span>Marquer les Absences</span>
+          </Space>
+        }
+        open={isModalOpen}
+        onOk={handleSubmit}
+        onCancel={handleCloseModal}
+        confirmLoading={createMutation.isPending}
+        okText="Enregistrer"
+        cancelText="Annuler"
+        cancelButtonProps={{
+          className: 'modern-button-secondary-outline',
+        }}
+        width={600}
+      >
+        <Form form={form} layout="vertical">
+          <Form.Item
+            name="subjectId"
+            label="Matière"
+            rules={[{ required: true, message: 'La matière est obligatoire' }]}
+          >
+            <Select
+              placeholder="Sélectionnez une matière"
+              onChange={(value) => setSelectedSubject(value)}
+              showSearch
+              optionFilterProp="children"
+            >
+              {uniqueSubjects.map((subject: any) => (
+                <Select.Option key={subject.id} value={subject.id}>
+                  {subject.name}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            name="date"
+            label="Date"
+            rules={[{ required: true, message: 'La date est obligatoire' }]}
+          >
+            <DatePicker
+              style={{ width: '100%' }}
+              format="DD/MM/YYYY"
+              onChange={(date) => setSelectedDate(date)}
+            />
+          </Form.Item>
+
+          {displayedTimetableData && displayedTimetableData.length > 0 && (
+            <div style={{ marginBottom: '16px', padding: '12px', background: '#f5f5f5', borderRadius: '8px' }}>
+              <Text strong>Emploi du temps : </Text>
+              <div style={{ marginTop: '8px' }}>
+                {displayedTimetableData.map((tt: any, index: number) => {
+                  const dayNames: { [key: string]: string } = {
+                    MONDAY: 'Lundi',
+                    TUESDAY: 'Mardi',
+                    WEDNESDAY: 'Mercredi',
+                    THURSDAY: 'Jeudi',
+                    FRIDAY: 'Vendredi',
+                    SATURDAY: 'Samedi',
+                  };
+                  
+                  const isToday = tt.day_of_week === currentDay;
+                  const isNext = nextCourse && tt.day_of_week === nextCourse.day_of_week && tt.start_time === nextCourse.start_time;
+                  
+                  return (
+                    <div 
+                      key={index} 
+                      style={{ 
+                        marginBottom: '8px',
+                        padding: '8px',
+                        background: isToday ? (isNext ? 'rgba(24, 144, 255, 0.1)' : 'rgba(36, 174, 106, 0.1)') : 'transparent',
+                        borderRadius: '6px',
+                        border: isToday ? (isNext ? '1px solid #1890ff' : '1px solid rgb(var(--role-primary))') : 'none',
+                      }}
+                    >
+                      <Space>
+                        <Tag 
+                          color={isNext ? 'blue' : isToday ? 'green' : 'default'} 
+                          style={{ marginRight: '8px' }}
+                        >
+                          {dayNames[tt.day_of_week] || tt.day_of_week}
+                          {isToday && !isNext && <span style={{ marginLeft: '4px' }}>• Aujourd'hui</span>}
+                          {isNext && <span style={{ marginLeft: '4px' }}>• Prochain</span>}
+                        </Tag>
+                        <Text strong={isToday || isNext}>{tt.start_time} - {tt.end_time}</Text>
+                      </Space>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ marginTop: '8px' }}>
+                <Text type="secondary">
+                  Affichage: {displayedTimetableData.length} créneau(x) sur {timetableHours} disponible(s)
+                </Text>
+              </div>
+            </div>
+          )}
+
+          <Form.Item
+            name="hoursAbsent"
+            label="Nombre d'heures d'absence"
+            rules={[
+              { required: true, message: 'Le nombre d\'heures est obligatoire' },
+            ]}
+          >
+            <Select
+              placeholder="Sélectionnez le nombre d'heures"
+              style={{ width: '100%' }}
+              value={selectedHoursCount}
+              onChange={(value) => {
+                setSelectedHoursCount(value);
+                form.setFieldsValue({ hoursAbsent: value });
+              }}
+            >
+              {Array.from({ length: timetableHours }, (_, i) => i + 1).map((num) => (
+                <Select.Option key={num} value={num}>
+                  {num} heure{num > 1 ? 's' : ''}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            name="students"
+            label="Élèves absents"
+            rules={[{ required: true, message: 'Sélectionnez au moins un élève' }]}
+          >
+            <Select
+              mode="multiple"
+              placeholder="Sélectionnez les élèves absents"
+              showSearch
+              optionFilterProp="children"
+              filterOption={(input, option) =>
+                String(option?.children || '').toLowerCase().includes(input.toLowerCase())
+              }
+            >
+              {studentsData?.map((student: any) => (
+                <Select.Option key={student.id} value={student.id}>
+                  {student.firstName} {student.lastName}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  );
+}
+

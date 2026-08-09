@@ -1,0 +1,41 @@
+{
+  "name": "@school/database",
+  "version": "1.0.0",
+  "description": "Base de données Prisma pour le système de gestion scolaire",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "dev": "tsc --watch",
+    "type-check": "tsc --noEmit",
+    "generate": "prisma generate",
+    "migrate": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "migrate:reset": "prisma migrate reset",
+    "studio": "prisma studio",
+    "seed": "tsx src/seed.ts",
+    "convert-inscriptions": "tsx src/scripts/convert-inscriptions-to-students.ts",
+    "apply-payroll-migration": "tsx src/scripts/apply-payroll-migration.ts",
+    "apply-seniority-bareme-migration": "tsx src/scripts/apply-seniority-bareme-migration.ts",
+    "verify-payroll-settings": "tsx src/scripts/verify-and-fix-payroll-settings.ts",
+    "apply-contract-hours-migration": "tsx src/scripts/apply-contract-hours-migration.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "@school/types": "workspace:*",
+    "@types/node": "^20.10.5",
+    "bcryptjs": "^2.4.3",
+    "prisma": "^5.22.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "dotenv": "^16.3.1",
+    "tsx": "^4.6.2",
+    "typescript": "^5.3.3"
+  },
+  "files": [
+    "dist",
+    "prisma"
+  ]
+}

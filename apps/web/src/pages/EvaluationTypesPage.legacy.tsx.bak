@@ -1,0 +1,297 @@
+import { useState, useEffect } from 'react';
+import {
+  Button,
+  Modal,
+  Form,
+  Input,
+  Space,
+  Row,
+  Col,
+  App,
+  Select,
+  Spin,
+} from 'antd';
+import { ClipboardList, Plus, Search } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '../lib/api';
+import { useAuthStore } from '../lib/store';
+import { PageHeader } from '../components/ui/page-header';
+import { GlassCard } from '../components/ui/glass-card';
+import { EmptyState } from '../components/ui/empty-state';
+import { ResourceCard } from '../components/pedagogy/ResourceCard';
+import { PaginationBar } from '../components/pedagogy/PaginationBar';
+
+export default function EvaluationTypesPage() {
+  const { message: messageApi } = App.useApp();
+  const { user } = useAuthStore();
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingEvaluationType, setEditingEvaluationType] = useState<any>(null);
+  const [searchText, setSearchText] = useState<string>('');
+  const [form] = Form.useForm();
+  const queryClient = useQueryClient();
+  const [pagination, setPagination] = useState({
+    current: 1,
+    pageSize: 12,
+  });
+
+  // Fetch current teacher info
+  const { data: teacherInfo } = useQuery({
+    queryKey: ['teacher-info'],
+    queryFn: async () => {
+      if (user?.role === 'TEACHER') {
+        const response = await api.get('/teachers/me/info');
+        return response.data.data;
+      }
+      return null;
+    },
+    enabled: user?.role === 'TEACHER',
+  });
+
+  // Fetch evaluation types
+  const { data: evaluationTypesData, isLoading } = useQuery({
+    queryKey: ['evaluation-types', teacherInfo?.id],
+    queryFn: async () => {
+      const params = teacherInfo?.id ? `?teacherId=${teacherInfo.id}` : '';
+      const response = await api.get(`/evaluation-types${params}`);
+      return response.data.data || [];
+    },
+    enabled: user?.role === 'TEACHER' ? !!teacherInfo?.id : true,
+  });
+
+  // Filter evaluation types based on search
+  const filteredEvaluationTypes = evaluationTypesData
+    ? evaluationTypesData.filter((type: any) => {
+        if (!searchText) return true;
+        const search = searchText.toLowerCase();
+        return type.name?.toLowerCase().includes(search);
+      })
+    : [];
+
+  // Create mutation
+  const createMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const response = await api.post('/evaluation-types', {
+        name: data.name,
+        teacherId: teacherInfo?.id || data.teacherId,
+        coefficient: data.coefficient,
+      });
+      return response.data;
+    },
+    onSuccess: (data) => {
+      // Vérifier si la réponse indique un succès
+      if (data?.success !== false) {
+        messageApi.success('Type d\'évaluation créé avec succès');
+        queryClient.invalidateQueries({ queryKey: ['evaluation-types'] });
+        handleCancel();
+      } else {
+        // Si success est false, afficher l'erreur
+        const errorMessage = data?.error || 'Erreur lors de la création';
+        messageApi.error(errorMessage);
+      }
+    },
+    onError: (error: any) => {
+      // Ne pas afficher d'erreur si le statut est 201 (créé)
+      if (error.response?.status === 201) {
+        // C'est un succès, laisser onSuccess gérer
+        return;
+      }
+      const errorMessage = error.response?.data?.error || error.message || 'Erreur lors de la création';
+      messageApi.error(errorMessage);
+    },
+  });
+
+  // Update mutation
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const response = await api.patch(`/evaluation-types/${id}`, data);
+      return response.data;
+    },
+    onSuccess: () => {
+      messageApi.success('Type d\'évaluation modifié avec succès');
+      queryClient.invalidateQueries({ queryKey: ['evaluation-types'] });
+      handleCancel();
+    },
+    onError: (error: any) => {
+      const errorMessage = error.response?.data?.error || 'Erreur lors de la modification';
+      messageApi.error(errorMessage);
+    },
+  });
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await api.delete(`/evaluation-types/${id}`);
+      return response.data;
+    },
+    onSuccess: () => {
+      messageApi.success('Type d\'évaluation supprimé avec succès');
+      queryClient.invalidateQueries({ queryKey: ['evaluation-types'] });
+    },
+    onError: (error: any) => {
+      const errorMessage = error.response?.data?.error || 'Erreur lors de la suppression';
+      messageApi.error(errorMessage);
+    },
+  });
+
+  const handleEdit = (evaluationType: any) => {
+    setEditingEvaluationType(evaluationType);
+    form.setFieldsValue({
+      name: evaluationType.name,
+      coefficient: evaluationType.coefficient || 2,
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleCancel = () => {
+    setIsModalOpen(false);
+    setEditingEvaluationType(null);
+    form.resetFields();
+  };
+
+  const handleSubmit = async () => {
+    try {
+      const values = await form.validateFields();
+      // Convert coefficient to number if it exists, otherwise don't send it
+      const submitData: any = {
+        name: values.name,
+      };
+      if (values.coefficient) {
+        submitData.coefficient = Number(values.coefficient);
+      }
+      if (editingEvaluationType) {
+        updateMutation.mutate({ id: editingEvaluationType.id, data: submitData });
+      } else {
+        submitData.teacherId = teacherInfo?.id;
+        createMutation.mutate(submitData);
+      }
+    } catch (error) {
+      console.error('Validation error:', error);
+    }
+  };
+
+  return (
+    <div className="animate-fade-in mx-auto max-w-7xl space-y-8">
+      <PageHeader
+        title="Types d'Évaluation"
+        description="Gestion des types d'évaluation (Devoir, Contrôle, Examen, etc.)"
+        action={
+          <Button
+            type="primary"
+            icon={<Plus className="h-4 w-4" aria-hidden="true" />}
+            onClick={() => setIsModalOpen(true)}
+            size="large"
+          >
+            Nouveau Type d'Évaluation
+          </Button>
+        }
+      />
+
+      <GlassCard variant="glass" styles={{ body: { padding: '24px' } }}>
+        <Row gutter={16} style={{ marginBottom: 16 }}>
+          <Col span={12}>
+            <Input
+              placeholder="Rechercher par nom..."
+              prefix={<Search className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
+              value={searchText}
+              onChange={(e) => {
+                setSearchText(e.target.value);
+                setPagination({ ...pagination, current: 1 });
+              }}
+              allowClear
+            />
+          </Col>
+        </Row>
+
+        {isLoading ? (
+          <div className="flex justify-center py-16">
+            <Spin size="large" />
+          </div>
+        ) : filteredEvaluationTypes && filteredEvaluationTypes.length > 0 ? (
+          <>
+            <Row gutter={[24, 24]}>
+              {filteredEvaluationTypes
+                .slice((pagination.current - 1) * pagination.pageSize, pagination.current * pagination.pageSize)
+                .map((evaluationType: any) => (
+                  <ResourceCard
+                    key={evaluationType.id}
+                    title={evaluationType.name}
+                    subtitle={
+                      evaluationType.coefficient
+                        ? `Coefficient : ${evaluationType.coefficient}`
+                        : undefined
+                    }
+                    icon={ClipboardList}
+                    onEdit={() => handleEdit(evaluationType)}
+                    onDelete={() => deleteMutation.mutate(evaluationType.id)}
+                  />
+                ))}
+            </Row>
+            <PaginationBar
+              current={pagination.current}
+              pageSize={pagination.pageSize}
+              total={filteredEvaluationTypes.length}
+              onChange={(page) => setPagination({ ...pagination, current: page })}
+              onPageSizeChange={(size) => setPagination({ current: 1, pageSize: size })}
+            />
+          </>
+        ) : (
+          <EmptyState
+            icon={ClipboardList}
+            title={
+              evaluationTypesData === undefined && !isLoading
+                ? 'Aucune donnée disponible'
+                : "Aucun type d'évaluation trouvé"
+            }
+            description="Créez un nouveau type d'évaluation pour commencer."
+            actionLabel="Nouveau Type d'Évaluation"
+            onAction={() => setIsModalOpen(true)}
+          />
+        )}
+      </GlassCard>
+
+      <Modal
+        title={
+          <Space>
+            <ClipboardList className="h-5 w-5 text-role-primary" aria-hidden="true" />
+            <span>
+              {editingEvaluationType ? "Modifier le Type d'Évaluation" : "Nouveau Type d'Évaluation"}
+            </span>
+          </Space>
+        }
+        open={isModalOpen}
+        onOk={handleSubmit}
+        onCancel={handleCancel}
+        okText={editingEvaluationType ? 'Modifier' : 'Créer'}
+        cancelText="Annuler"
+        confirmLoading={createMutation.isPending || updateMutation.isPending}
+        width={500}
+      >
+        <Form form={form} layout="vertical" style={{ marginTop: '24px' }}>
+          <Form.Item
+            name="name"
+            label="Nom du type d'évaluation"
+            rules={[
+              { required: true, message: 'Le nom est requis' },
+              { min: 2, message: 'Le nom doit contenir au moins 2 caractères' },
+              { max: 200, message: 'Le nom ne peut pas dépasser 200 caractères' },
+            ]}
+          >
+            <Input
+              placeholder="Ex: Devoir, Contrôle, Examen, Interrogation..."
+              size="large"
+              maxLength={200}
+            />
+          </Form.Item>
+          <Form.Item
+            name="coefficient"
+            label="Coefficient (optionnel, uniquement pour notes sur 20)"
+          >
+            <Select placeholder="Sélectionner un coefficient" size="large" style={{ width: '100%' }} allowClear>
+              <Select.Option value={2}>2</Select.Option>
+            </Select>
+          </Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  );
+}

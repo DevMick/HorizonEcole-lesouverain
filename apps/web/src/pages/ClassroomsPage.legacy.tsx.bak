@@ -1,0 +1,249 @@
+﻿import { useState } from 'react';
+import {
+  Button,
+  Modal,
+  Form,
+  Input,
+  Space,
+  message,
+  Row,
+  Col,
+  Spin,
+} from 'antd';
+import { Building2, Plus, Search } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '../lib/api';
+import { PageHeader } from '../components/ui/page-header';
+import { GlassCard } from '../components/ui/glass-card';
+import { EmptyState } from '../components/ui/empty-state';
+import { ResourceCard } from '../components/pedagogy/ResourceCard';
+import { PaginationBar } from '../components/pedagogy/PaginationBar';
+
+export default function ClassroomsPage() {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingClassroom, setEditingClassroom] = useState<any>(null);
+  const [searchText, setSearchText] = useState<string>('');
+  const [form] = Form.useForm();
+  const queryClient = useQueryClient();
+  const [pagination, setPagination] = useState({
+    current: 1,
+    pageSize: 12,
+  });
+
+  // Fetch classrooms
+  const { data: classroomsData, isLoading } = useQuery({
+    queryKey: ['classrooms', pagination.current, pagination.pageSize, searchText],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        page: pagination.current.toString(),
+        limit: pagination.pageSize.toString(),
+      });
+      if (searchText) params.append('search', searchText);
+
+      const response = await api.get(`/classrooms?${params.toString()}`);
+      return response.data;
+    },
+  });
+
+  // Create classroom mutation
+  const createMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const response = await api.post('/classrooms', data);
+      return response.data;
+    },
+    onSuccess: () => {
+      message.success('Salle de classe crÃ©Ã©e avec succÃ¨s !');
+      setIsModalOpen(false);
+      form.resetFields();
+      setEditingClassroom(null);
+      queryClient.invalidateQueries({ queryKey: ['classrooms'] });
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.error || 'Erreur lors de la crÃ©ation de la salle');
+    },
+  });
+
+  // Update classroom mutation
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const response = await api.patch(`/classrooms/${id}`, data);
+      return response.data;
+    },
+    onSuccess: () => {
+      message.success('Salle de classe modifiÃ©e avec succÃ¨s !');
+      setIsModalOpen(false);
+      form.resetFields();
+      setEditingClassroom(null);
+      queryClient.invalidateQueries({ queryKey: ['classrooms'] });
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.error || 'Erreur lors de la modification de la salle');
+    },
+  });
+
+  // Delete classroom mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await api.delete(`/classrooms/${id}`);
+      return response.data;
+    },
+    onSuccess: () => {
+      message.success('Salle de classe supprimÃ©e avec succÃ¨s !');
+      queryClient.invalidateQueries({ queryKey: ['classrooms'] });
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.error || 'Erreur lors de la suppression de la salle');
+    },
+  });
+
+  const handleSubmit = async () => {
+    try {
+      const values = await form.validateFields();
+      const data = {
+        name: values.name,
+      };
+
+      if (editingClassroom) {
+        updateMutation.mutate({ id: editingClassroom.id, data });
+      } else {
+        createMutation.mutate(data);
+      }
+    } catch (error: any) {
+      console.error('Validation error:', error);
+      if (error.errorFields) {
+        const errorMessages = error.errorFields.map((field: any) => {
+          const fieldName = Array.isArray(field.name) ? field.name[0] : field.name;
+          return `${fieldName}: ${Array.isArray(field.errors) ? field.errors[0] : field.errors}`;
+        });
+        message.error(`Erreurs de validation: ${errorMessages.join(', ')}`);
+      } else {
+        message.error('Erreur lors de la validation du formulaire');
+      }
+    }
+  };
+
+  const handleEdit = (classroom: any) => {
+    setEditingClassroom(classroom);
+    form.setFieldsValue({
+      name: classroom.name,
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = (id: string) => {
+    deleteMutation.mutate(id);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingClassroom(null);
+    form.resetFields();
+  };
+
+  const classrooms = classroomsData?.data?.data ?? [];
+  const totalClassrooms = classroomsData?.data?.total ?? 0;
+
+  return (
+    <div className="animate-fade-in mx-auto max-w-7xl space-y-8">
+      <PageHeader
+        title="Salles de Classes"
+        description="Gestion des salles de classes"
+        action={
+          <Button
+            type="primary"
+            icon={<Plus className="h-4 w-4" aria-hidden="true" />}
+            onClick={() => setIsModalOpen(true)}
+            size="large"
+          >
+            Nouvelle Salle
+          </Button>
+        }
+      />
+
+      <GlassCard variant="glass" styles={{ body: { padding: '24px' } }}>
+        <Row gutter={16} style={{ marginBottom: 16 }}>
+          <Col span={12}>
+            <Input
+              placeholder="Rechercher par nom..."
+              prefix={<Search className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
+              value={searchText}
+              onChange={(e) => {
+                setSearchText(e.target.value);
+                setPagination({ ...pagination, current: 1 });
+              }}
+              allowClear
+            />
+          </Col>
+        </Row>
+
+        {isLoading ? (
+          <div className="flex justify-center py-16">
+            <Spin size="large" />
+          </div>
+        ) : classrooms.length > 0 ? (
+          <>
+            <Row gutter={[24, 24]}>
+              {classrooms.map((classroom: any) => (
+                <ResourceCard
+                  key={classroom.id}
+                  title={classroom.name}
+                  icon={Building2}
+                  onEdit={() => handleEdit(classroom)}
+                  onDelete={() => handleDelete(classroom.id)}
+                />
+              ))}
+            </Row>
+            <PaginationBar
+              current={pagination.current}
+              pageSize={pagination.pageSize}
+              total={totalClassrooms}
+              onChange={(page) => setPagination({ ...pagination, current: page })}
+              onPageSizeChange={(size) => setPagination({ current: 1, pageSize: size })}
+            />
+          </>
+        ) : (
+          <EmptyState
+            icon={Building2}
+            title={
+              classroomsData === undefined && !isLoading
+                ? 'Aucune donnÃ©e disponible'
+                : 'Aucune salle trouvÃ©e'
+            }
+            description="CrÃ©ez une nouvelle salle pour commencer."
+            actionLabel="Nouvelle Salle"
+            onAction={() => setIsModalOpen(true)}
+          />
+        )}
+      </GlassCard>
+
+      <Modal
+        title={
+          <Space>
+            <Building2 className="h-5 w-5 text-role-primary" aria-hidden="true" />
+            <span>{editingClassroom ? 'Modifier la Salle' : 'Nouvelle Salle'}</span>
+          </Space>
+        }
+        open={isModalOpen}
+        onOk={handleSubmit}
+        onCancel={handleCloseModal}
+        confirmLoading={createMutation.isPending || updateMutation.isPending}
+        okText={editingClassroom ? 'Modifier' : 'CrÃ©er'}
+        cancelText="Annuler"
+        width={500}
+      >
+        <Form form={form} layout="vertical" style={{ marginTop: '24px' }}>
+          <Form.Item
+            name="name"
+            label="Nom de la salle"
+            rules={[
+              { required: true, message: 'Veuillez saisir le nom de la salle' },
+              { max: 100, message: 'Le nom ne doit pas dÃ©passer 100 caractÃ¨res' },
+            ]}
+          >
+            <Input placeholder="Ex: Salle A1, Salle B2..." />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  );
+}

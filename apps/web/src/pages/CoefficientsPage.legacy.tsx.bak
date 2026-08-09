@@ -1,0 +1,222 @@
+import { useState, useEffect } from 'react';
+import {
+  Table,
+  Button,
+  Select,
+  Space,
+  InputNumber,
+  message,
+  Tag,
+} from 'antd';
+import { BookOpen, Save } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '../lib/api';
+import { PageHeader } from '../components/ui/page-header';
+import { GlassCard } from '../components/ui/glass-card';
+import { EmptyState } from '../components/ui/empty-state';
+
+export default function CoefficientsPage() {
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+  const [coefficients, setCoefficients] = useState<Record<string, number>>({});
+  const queryClient = useQueryClient();
+
+  // Fetch classes
+  const { data: classesData } = useQuery({
+    queryKey: ['coefficients-classes'],
+    queryFn: async () => {
+      const response = await api.get('/coefficients/classes');
+      return response.data.data;
+    },
+  });
+
+  // Fetch class subjects with coefficients
+  const { data: classSubjectsData, isLoading } = useQuery({
+    queryKey: ['coefficients-class', selectedClassId],
+    queryFn: async () => {
+      if (!selectedClassId) return [];
+      const response = await api.get(`/coefficients/class/${selectedClassId}`);
+      return response.data.data;
+    },
+    enabled: !!selectedClassId,
+  });
+
+  // Initialize coefficients when data loads
+  useEffect(() => {
+    if (classSubjectsData && classSubjectsData.length > 0) {
+      const initialCoefficients: Record<string, number> = {};
+      classSubjectsData.forEach((cs: any) => {
+        initialCoefficients[cs.subject.id] = cs.coefficient || 1;
+      });
+      setCoefficients(initialCoefficients);
+    } else {
+      // Reset coefficients if no subjects assigned
+      setCoefficients({});
+    }
+  }, [classSubjectsData]);
+
+  // Batch update mutation
+  const updateMutation = useMutation({
+    mutationFn: async (data: { classId: string; coefficients: Array<{ subjectId: string; coefficient: number }> }) => {
+      const response = await api.post(`/coefficients/class/${data.classId}/batch`, {
+        coefficients: data.coefficients,
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      message.success('Coefficients enregistrés avec succès !');
+      queryClient.invalidateQueries({ queryKey: ['coefficients-class', selectedClassId] });
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.error || 'Erreur lors de l\'enregistrement');
+    },
+  });
+
+  const handleCoefficientChange = (subjectId: string, value: number | null) => {
+    if (value !== null) {
+      setCoefficients(prev => ({ ...prev, [subjectId]: value }));
+    }
+  };
+
+  const handleSave = () => {
+    if (!selectedClassId) {
+      message.warning('Veuillez sélectionner une classe');
+      return;
+    }
+
+    const coefficientsArray = Object.entries(coefficients).map(([subjectId, coefficient]) => ({
+      subjectId,
+      coefficient,
+    }));
+
+    updateMutation.mutate({
+      classId: selectedClassId,
+      coefficients: coefficientsArray,
+    });
+  };
+
+  const columns = [
+    {
+      title: 'Matière',
+      key: 'subject',
+      width: 300,
+      render: (_: any, record: any) => (
+        <Space>
+          <BookOpen className="h-4 w-4 text-role-primary" aria-hidden="true" />
+          <strong>{record.name}</strong>
+        </Space>
+      ),
+    },
+    {
+      title: 'Coefficient',
+      key: 'coefficient',
+      width: 200,
+      align: 'center' as const,
+      render: (_: any, record: any) => {
+        const subjectId = record.subjectId || record.id;
+        return (
+          <InputNumber
+            min={1}
+            max={20}
+            value={coefficients[subjectId] || 1}
+            onChange={(value) => handleCoefficientChange(subjectId, value)}
+            style={{ width: 120 }}
+          />
+        );
+      },
+    },
+  ];
+
+  // Prepare data for table - only show assigned subjects
+  const tableData = selectedClassId && classSubjectsData
+    ? classSubjectsData.map((cs: any) => ({
+        id: cs.subject.id,
+        name: cs.subject.name,
+        subjectId: cs.subject.id,
+        coefficient: cs.coefficient || coefficients[cs.subject.id] || 1,
+      }))
+    : [];
+
+  return (
+    <div className="animate-fade-in mx-auto max-w-7xl space-y-8">
+      <PageHeader
+        title="Coefficients par Classe"
+        description="Attribution des coefficients des matières pour chaque classe"
+        action={
+          selectedClassId && tableData.length > 0 ? (
+            <Button
+              type="primary"
+              icon={<Save className="h-4 w-4" aria-hidden="true" />}
+              onClick={handleSave}
+              loading={updateMutation.isPending}
+              size="large"
+            >
+              Enregistrer les Coefficients
+            </Button>
+          ) : undefined
+        }
+      />
+
+      <GlassCard variant="glass" styles={{ body: { padding: '24px' } }}>
+        <Space direction="vertical" style={{ width: '100%' }} size="large">
+          <div>
+            <label className="mb-2 block text-sm font-medium text-foreground">
+              Sélectionner une classe
+            </label>
+            <Select
+              placeholder="Choisissez une classe pour définir les coefficients"
+              style={{ width: '100%', maxWidth: 400 }}
+              value={selectedClassId}
+              onChange={(value) => {
+                setSelectedClassId(value);
+                setCoefficients({});
+              }}
+              options={classesData?.map((cls: any) => ({
+                label: cls.name,
+                value: cls.id,
+              }))}
+            />
+          </div>
+          {selectedClassId && (
+            <Tag color="blue">
+              {classesData?.find((c: any) => c.id === selectedClassId)?.name}
+            </Tag>
+          )}
+        </Space>
+      </GlassCard>
+
+      {selectedClassId && tableData.length > 0 && (
+        <GlassCard variant="glass" styles={{ body: { padding: '24px' } }}>
+          <Table
+            columns={columns}
+            dataSource={tableData}
+            loading={isLoading}
+            rowKey="id"
+            scroll={{ x: 600 }}
+            pagination={{
+              pageSize: 20,
+              showSizeChanger: false,
+              showTotal: (total, range) => `${range[0]}-${range[1]} sur ${total} matières`,
+            }}
+          />
+        </GlassCard>
+      )}
+
+      {selectedClassId && !isLoading && tableData.length === 0 && (
+        <EmptyState
+          icon={BookOpen}
+          title="Aucune matière affectée à cette classe"
+          description={"Veuillez d'abord affecter des matières via la page \"Affectations\"."}
+        />
+      )}
+
+      {!selectedClassId && (
+        <EmptyState
+          icon={BookOpen}
+          title="Sélectionnez une classe"
+          description="Choisissez une classe pour afficher et modifier les coefficients des matières."
+        />
+      )}
+    </div>
+  );
+}
+

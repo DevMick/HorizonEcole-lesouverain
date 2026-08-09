@@ -1,0 +1,897 @@
+import { useState, useEffect } from 'react';
+import {
+  Button,
+  Modal,
+  Form,
+  Select,
+  Space,
+  Typography,
+  message,
+  Popconfirm,
+  InputNumber,
+  Input,
+  Row,
+  Col,
+  Table,
+  Tag,
+  App,
+  Alert,
+} from 'antd';
+import {
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+} from '@ant-design/icons';
+import { BookOpen, Calendar, Users } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '../lib/api';
+import { useAuthStore } from '../lib/store';
+import dayjs from 'dayjs';
+import { PageHeader } from '../components/ui/page-header';
+import { GlassCard } from '../components/ui/glass-card';
+import { EmptyState } from '../components/ui/empty-state';
+const { Text } = Typography;
+
+export default function GradesPage() {
+  const { message: messageApi } = App.useApp();
+  const { user } = useAuthStore();
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingGrade, setEditingGrade] = useState<any>(null);
+  const [form] = Form.useForm();
+  const queryClient = useQueryClient();
+
+  // Filters
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>('');
+  const [selectedSemester, setSelectedSemester] = useState<string>('');
+  const [selectedSubject, setSelectedSubject] = useState<string>('');
+  const [selectedClass, setSelectedClass] = useState<string>('');
+  const [currentTeacherId, setCurrentTeacherId] = useState<string>('');
+  const [numberOfNoteColumns, setNumberOfNoteColumns] = useState<number>(0);
+
+  // Fetch academic years
+  const { data: academicYearsData } = useQuery({
+    queryKey: ['academic-years-all'],
+    queryFn: async () => {
+      const response = await api.get('/academic-years');
+      return response.data.data || [];
+    },
+  });
+
+  // Fetch current teacher info
+  const { data: teacherInfo } = useQuery({
+    queryKey: ['teacher-info'],
+    queryFn: async () => {
+      if (user?.role === 'TEACHER') {
+        const response = await api.get('/teachers/me/info');
+        return response.data.data;
+      }
+      return null;
+    },
+    enabled: user?.role === 'TEACHER',
+  });
+
+  // Set teacher ID when info is loaded
+  useEffect(() => {
+    if (teacherInfo?.id) {
+      setCurrentTeacherId(teacherInfo.id);
+    }
+  }, [teacherInfo]);
+
+  // Set default academic year to current year (always use current year)
+  useEffect(() => {
+    if (academicYearsData && academicYearsData.length > 0) {
+      const currentYear = academicYearsData.find((year: any) => year.isCurrent);
+      if (currentYear && currentYear.id !== selectedAcademicYear) {
+        setSelectedAcademicYear(currentYear.id);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [academicYearsData]);
+
+  // Fetch semesters
+  const { data: semestersData } = useQuery({
+    queryKey: ['semesters', selectedAcademicYear],
+    queryFn: async () => {
+      if (!selectedAcademicYear) return [];
+      const response = await api.get(`/semesters?academicYearId=${selectedAcademicYear}`);
+      return response.data.data || [];
+    },
+    enabled: !!selectedAcademicYear,
+  });
+
+  // Determine active semester based on dates
+  const getActiveSemester = () => {
+    if (!semestersData || semestersData.length === 0) return null;
+    
+    const now = dayjs();
+    const sortedSemesters = [...semestersData].sort((a: any, b: any) => {
+      const dateA = dayjs(a.start_date);
+      const dateB = dayjs(b.start_date);
+      return dateA.isBefore(dateB) ? -1 : 1;
+    });
+
+    // Find the semester where current date is between start_date and end_date
+    for (const semester of sortedSemesters) {
+      const startDate = dayjs(semester.start_date);
+      const endDate = dayjs(semester.end_date);
+      if (now.isAfter(startDate) || now.isSame(startDate, 'day')) {
+        if (now.isBefore(endDate) || now.isSame(endDate, 'day')) {
+          return semester;
+        }
+      }
+    }
+
+    // If no active semester, find the next one (first with start_date in the future)
+    for (const semester of sortedSemesters) {
+      const startDate = dayjs(semester.start_date);
+      if (startDate.isAfter(now)) {
+        return semester;
+      }
+    }
+
+    // If all semesters are in the past, return the last one
+    return sortedSemesters[sortedSemesters.length - 1] || null;
+  };
+
+  const activeSemester = getActiveSemester();
+  const isActiveSemesterFinished = activeSemester ? dayjs().isAfter(dayjs(activeSemester.end_date)) : false;
+
+  // Check if the selected semester is finished
+  const isSelectedSemesterFinished = () => {
+    if (!selectedSemester || !semestersData) return false;
+    const selectedSem = semestersData.find((s: any) => s.id === selectedSemester);
+    if (!selectedSem) return false;
+    return dayjs().isAfter(dayjs(selectedSem.end_date));
+  };
+
+  const selectedSemesterFinished = isSelectedSemesterFinished();
+
+  // Set default semester to active semester
+  useEffect(() => {
+    if (activeSemester && activeSemester.id !== selectedSemester) {
+      setSelectedSemester(activeSemester.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSemester]);
+
+  // Fetch teacher assignments (for subjects and classes)
+  const { data: assignmentsData } = useQuery({
+    queryKey: ['teacher-assignments', currentTeacherId, selectedAcademicYear],
+    queryFn: async () => {
+      if (!currentTeacherId || !selectedAcademicYear) return [];
+      const response = await api.get(`/grades/teacher/${currentTeacherId}/assignments?academicYearId=${selectedAcademicYear}`);
+      return response.data.data || [];
+    },
+    enabled: !!currentTeacherId && !!selectedAcademicYear && user?.role === 'TEACHER',
+  });
+
+  // Get unique subjects from assignments
+  const availableSubjects = assignmentsData?.map((assignment: any) => assignment.subject) || [];
+  const uniqueSubjects = Array.from(
+    new Map(availableSubjects.map((subject: any) => [subject.id, subject])).values()
+  );
+
+  // Get unique classes from assignments
+  const availableClasses = assignmentsData?.map((assignment: any) => assignment.class) || [];
+  const uniqueClasses = Array.from(
+    new Map(availableClasses.map((cls: any) => [cls.id, cls])).values()
+  );
+
+  // Filter assignments by selected subject and class
+  const filteredAssignments = assignmentsData?.filter((assignment: any) => {
+    if (selectedSubject && assignment.subject.id !== selectedSubject) return false;
+    if (selectedClass && assignment.class.id !== selectedClass) return false;
+    return true;
+  }) || [];
+
+  // Fetch students for selected class
+  const { data: studentsData } = useQuery({
+    queryKey: ['students-by-class', selectedClass],
+    queryFn: async () => {
+      if (!selectedClass) return [];
+      const response = await api.get(`/students?classId=${selectedClass}&limit=1000`);
+      return response.data.data || [];
+    },
+    enabled: !!selectedClass,
+  });
+
+  // Fetch evaluation types for current teacher
+  const { data: evaluationTypesData } = useQuery({
+    queryKey: ['evaluation-types', currentTeacherId],
+    queryFn: async () => {
+      if (!currentTeacherId) return [];
+      const response = await api.get(`/evaluation-types?teacherId=${currentTeacherId}`);
+      return response.data.data || [];
+    },
+    enabled: !!currentTeacherId,
+  });
+
+  // Fetch grades
+  const { data: gradesData, isLoading: gradesLoading } = useQuery({
+    queryKey: ['grades', selectedAcademicYear, currentTeacherId, selectedSubject, selectedSemester, selectedClass],
+    queryFn: async () => {
+      if (!selectedAcademicYear || !currentTeacherId) return [];
+      const params = new URLSearchParams({
+        academicYearId: selectedAcademicYear,
+        teacherId: currentTeacherId,
+      });
+      if (selectedSubject) params.append('subjectId', selectedSubject);
+      if (selectedSemester) params.append('semesterId', selectedSemester);
+      if (selectedClass) params.append('classId', selectedClass);
+
+      const response = await api.get(`/grades?${params.toString()}`);
+      return response.data.data || [];
+    },
+    enabled: !!selectedAcademicYear && !!currentTeacherId,
+  });
+
+  // Create grade mutation
+  const createMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const response = await api.post('/grades', {
+        academicYearId: selectedAcademicYear,
+        teacherId: currentTeacherId,
+        subjectId: selectedSubject,
+        semesterId: selectedSemester,
+        studentId: data.studentId,
+        classId: selectedClass,
+        evaluationTypeId: data.evaluationTypeId,
+        note: data.note,
+        maxNote: data.maxNote,
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      messageApi.success('Note créée avec succès');
+      queryClient.invalidateQueries({ queryKey: ['grades'] });
+      handleCloseModal();
+    },
+    onError: (error: any) => {
+      const errorMessage = error.response?.data?.error || 'Erreur lors de la création de la note';
+      messageApi.error(errorMessage);
+    },
+  });
+
+  // Update mutation
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const response = await api.patch(`/grades/${id}`, {
+        evaluationTypeId: data.evaluationTypeId,
+        note: data.note,
+        maxNote: data.maxNote,
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      messageApi.success('Note modifiée avec succès');
+      queryClient.invalidateQueries({ queryKey: ['grades'] });
+      handleCloseModal();
+    },
+    onError: (error: any) => {
+      const errorMessage = error.response?.data?.error || 'Erreur lors de la modification de la note';
+      messageApi.error(errorMessage);
+    },
+  });
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await api.delete(`/grades/${id}`);
+      return response.data;
+    },
+    onSuccess: () => {
+      messageApi.success('Note supprimée avec succès');
+      queryClient.invalidateQueries({ queryKey: ['grades'] });
+    },
+    onError: (error: any) => {
+      const errorMessage = error.response?.data?.error || 'Erreur lors de la suppression de la note';
+      messageApi.error(errorMessage);
+    },
+  });
+
+  const [currentColumnIndex, setCurrentColumnIndex] = useState<number | null>(null);
+
+  const handleOpenModal = (student?: any, grade?: any, columnIndex?: number) => {
+    if (grade) {
+      setEditingGrade(grade);
+      // Find which column this grade belongs to
+      const grades = getStudentGrades(grade.student_id || grade.student?.id);
+      const gradeIndex = grades.findIndex((g: any) => g.id === grade.id);
+      setCurrentColumnIndex(gradeIndex >= 0 ? gradeIndex : null);
+      
+      form.setFieldsValue({
+        studentId: grade.student_id || grade.student?.id,
+        evaluationTypeId: grade.evaluation_type_id || grade.evaluationType?.id,
+        note: parseFloat(grade.note.toString()),
+        maxNote: grade.max_note,
+      });
+    } else if (student) {
+      setEditingGrade(null);
+      const colIndex = columnIndex !== undefined ? columnIndex : null;
+      setCurrentColumnIndex(colIndex);
+      
+      // Get the evaluation type for this column if it exists
+      const columnEvaluationTypeId = colIndex !== null ? getEvaluationTypeForColumn(colIndex) : null;
+      
+      form.setFieldsValue({
+        studentId: student.id,
+        evaluationTypeId: columnEvaluationTypeId || undefined,
+        maxNote: 20,
+      });
+    } else {
+      setEditingGrade(null);
+      setCurrentColumnIndex(null);
+      form.resetFields();
+    }
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingGrade(null);
+    setCurrentColumnIndex(null);
+    form.resetFields();
+  };
+
+  const handleSubmit = async () => {
+    try {
+      const values = await form.validateFields();
+      
+      // Validate evaluation type for new grades
+      if (!editingGrade && currentColumnIndex !== null) {
+        const columnEvaluationTypeId = getEvaluationTypeForColumn(currentColumnIndex);
+        const usedTypes = getUsedEvaluationTypes(currentColumnIndex);
+        
+        // Check if the selected type is already used in another column
+        if (usedTypes.has(values.evaluationTypeId)) {
+          messageApi.error('Ce type d\'évaluation est déjà utilisé dans une autre colonne');
+          return;
+        }
+        
+        // Check if the selected type matches the column's type (if it exists)
+        if (columnEvaluationTypeId && values.evaluationTypeId !== columnEvaluationTypeId) {
+          messageApi.error('Le type d\'évaluation doit être le même que celui utilisé dans cette colonne');
+          return;
+        }
+      }
+      
+      if (editingGrade) {
+        updateMutation.mutate({ id: editingGrade.id, data: values });
+      } else {
+        createMutation.mutate(values);
+      }
+    } catch (error) {
+      console.error('Validation failed:', error);
+    }
+  };
+
+  // Get all grades for a student, sorted by creation date to maintain consistent column positions
+  const getStudentGrades = (studentId: string) => {
+    const filtered = gradesData?.filter((grade: any) => 
+      grade.student_id === studentId && 
+      grade.subject_id === selectedSubject &&
+      grade.semester_id === selectedSemester
+    ) || [];
+    
+    // Sort by creation date to ensure notes stay in their original columns
+    return filtered.sort((a: any, b: any) => {
+      const dateA = new Date(a.created_at || a.createdAt || 0).getTime();
+      const dateB = new Date(b.created_at || b.createdAt || 0).getTime();
+      return dateA - dateB;
+    });
+  };
+
+  // Get evaluation type for a specific column index
+  const getEvaluationTypeForColumn = (columnIndex: number) => {
+    if (!studentsData || studentsData.length === 0) return null;
+    
+    // Find the first student who has a grade in this column
+    for (const student of studentsData) {
+      const grades = getStudentGrades(student.id);
+      const grade = grades[columnIndex];
+      if (grade) {
+        return grade.evaluation_type_id || grade.evaluationType?.id;
+      }
+    }
+    return null;
+  };
+
+  // Get all evaluation types used in other columns (to exclude them)
+  const getUsedEvaluationTypes = (currentColumnIndex: number) => {
+    const usedTypes = new Set<string>();
+    
+    if (!studentsData || studentsData.length === 0) return usedTypes;
+    
+    studentsData.forEach((student: any) => {
+      const grades = getStudentGrades(student.id);
+      grades.forEach((grade: any, index: number) => {
+        // Exclude the current column
+        if (index !== currentColumnIndex) {
+          const typeId = grade.evaluation_type_id || grade.evaluationType?.id;
+          if (typeId) {
+            usedTypes.add(typeId);
+          }
+        }
+      });
+    });
+    
+    return usedTypes;
+  };
+
+  // Get evaluation type name for a grade
+  const getEvaluationTypeName = (grade: any) => {
+    if (grade.evaluationType?.name) {
+      return grade.evaluationType.name;
+    }
+    if (grade.evaluation_type_id && evaluationTypesData) {
+      const type = evaluationTypesData.find((t: any) => t.id === grade.evaluation_type_id);
+      return type?.name || '';
+    }
+    return '';
+  };
+
+  // Get evaluation type coefficient for a grade
+  const getEvaluationTypeCoefficient = (grade: any) => {
+    if (grade.evaluationType?.coefficient) {
+      return grade.evaluationType.coefficient;
+    }
+    if (grade.evaluation_type_id && evaluationTypesData) {
+      const type = evaluationTypesData.find((t: any) => t.id === grade.evaluation_type_id);
+      return type?.coefficient || null;
+    }
+    return null;
+  };
+
+  // Initialize and update columns based on existing grades
+  useEffect(() => {
+    if (!studentsData || studentsData.length === 0 || !gradesData) {
+      setNumberOfNoteColumns(0);
+      return;
+    }
+    
+    // Calculate maximum number of grades for all students
+    let maxCount = 0;
+    studentsData.forEach((student: any) => {
+      const grades = getStudentGrades(student.id);
+      if (grades.length > maxCount) {
+        maxCount = grades.length;
+      }
+    });
+    
+    // If there are existing grades, show at least that many columns
+    // Plus one extra column for adding new notes
+    if (maxCount > 0) {
+      setNumberOfNoteColumns(maxCount + 1);
+    } else {
+      // If no grades exist, reset to 0 (user must click to add columns)
+      setNumberOfNoteColumns(0);
+    }
+  }, [gradesData, studentsData, selectedAcademicYear, selectedSemester, selectedSubject, selectedClass]);
+
+  const maxGradesCount = numberOfNoteColumns;
+
+  // Build dynamic columns for notes
+  const buildNoteColumns = () => {
+    const noteColumns = [];
+    
+    // Create columns for notes (always at least Note 1)
+    for (let i = 0; i < maxGradesCount; i++) {
+      noteColumns.push({
+        title: `Note ${i + 1}`,
+        key: `note_${i + 1}`,
+        width: 200,
+        render: (_: any, record: any) => {
+          const grades = getStudentGrades(record.id);
+          const grade = grades[i];
+          
+          return (
+            <Space direction="vertical" size="small" style={{ width: '100%' }}>
+              {grade ? (
+                <>
+                  <Text style={{ fontSize: '11px', color: '#999' }}>
+                    {getEvaluationTypeName(grade)}
+                    {grade.max_note === 20 && getEvaluationTypeCoefficient(grade) && (
+                      <span style={{ marginLeft: '4px', color: '#d48806' }}>
+                        (Coeff: {getEvaluationTypeCoefficient(grade)})
+                      </span>
+                    )}
+                  </Text>
+                  <Space>
+                    <Tag color="blue">
+                      {parseFloat(grade.note.toString())}/{grade.max_note}
+                    </Tag>
+                    <Button
+                      type="link"
+                      size="small"
+                      icon={<EditOutlined />}
+                      onClick={() => handleOpenModal(record, grade, i)}
+                      style={{ padding: '0 4px' }}
+                    />
+                    <Popconfirm
+                      title="Supprimer cette note ?"
+                      onConfirm={() => deleteMutation.mutate(grade.id)}
+                      okText="Oui"
+                      cancelText="Non"
+                    >
+                      <Button
+                        type="link"
+                        size="small"
+                        danger
+                        icon={<DeleteOutlined />}
+                        style={{ padding: '0 4px' }}
+                      />
+                    </Popconfirm>
+                  </Space>
+                </>
+              ) : (
+                !selectedSemesterFinished && (
+                  <Button
+                    type="dashed"
+                    size="small"
+                    icon={<PlusOutlined />}
+                    onClick={() => handleOpenModal(record, undefined, i)}
+                    style={{ width: '100%' }}
+                  >
+                    Ajouter
+                  </Button>
+                )
+              )}
+            </Space>
+          );
+        },
+      });
+    }
+    
+    return noteColumns;
+  };
+
+  // Table columns
+  const baseColumns = [
+    {
+      title: 'N°',
+      key: 'index',
+      width: 60,
+      render: (_: any, __: any, index: number) => index + 1,
+    },
+    {
+      title: 'Nom et Prénom',
+      key: 'fullName',
+      render: (_: any, record: any) => `${record.lastName} ${record.firstName}`,
+    },
+    {
+      title: 'Sexe',
+      dataIndex: 'gender',
+      key: 'gender',
+      width: 100,
+      render: (gender: string) => {
+        if (gender === 'M' || gender === 'MALE' || gender === 'Masculin') {
+          return 'M';
+        } else if (gender === 'F' || gender === 'FEMALE' || gender === 'Féminin') {
+          return 'F';
+        }
+        return gender || '-';
+      },
+    },
+  ];
+
+  const noteColumns = buildNoteColumns();
+  const columns = [...baseColumns, ...noteColumns];
+
+  // Check if any grade exists in any column
+  const hasAnyGrade = () => {
+    if (!studentsData || studentsData.length === 0 || !gradesData) return false;
+    return studentsData.some((student: any) => {
+      const grades = getStudentGrades(student.id);
+      return grades.length > 0;
+    });
+  };
+
+  const canAddGrade = selectedAcademicYear && selectedSemester && selectedSubject && selectedClass && currentTeacherId;
+
+  return (
+    <div className="animate-fade-in mx-auto max-w-7xl space-y-8">
+      <PageHeader
+        title="Saisie des Notes"
+        description="Saisissez les notes des élèves par trimestre et matière"
+      />
+
+      <GlassCard variant="glass" styles={{ body: { padding: '24px' } }}>
+        {activeSemester && (
+          <Alert
+            message={
+              <Space>
+                <Calendar className="h-4 w-4" aria-hidden="true" />
+                <Text strong>Trimestre Actif : {activeSemester.name}</Text>
+                <Text type="secondary">
+                  ({dayjs(activeSemester.start_date).format('DD/MM/YYYY')} - {dayjs(activeSemester.end_date).format('DD/MM/YYYY')})
+                </Text>
+              </Space>
+            }
+            type="info"
+            showIcon
+            style={{ marginBottom: '16px' }}
+          />
+        )}
+
+        {/* Warning if trying to select different semester */}
+        {activeSemester && selectedSemester && selectedSemester !== activeSemester.id && !isActiveSemesterFinished && (
+          <Alert
+            message="Attention : Le trimestre actif n'est pas encore terminé. Vous essayez de sélectionner un autre trimestre."
+            type="warning"
+            showIcon
+            closable
+            style={{ marginBottom: '16px' }}
+          />
+        )}
+
+        <Row gutter={16} align="middle">
+          <Col xs={24} sm={12} md={8}>
+            <Form.Item label="Trimestre" style={{ marginBottom: 0 }}>
+              <Select
+                placeholder="Sélectionnez un trimestre"
+                value={selectedSemester}
+                onChange={(value) => {
+                  // Check if trying to select different semester while active is not finished
+                  if (activeSemester && value !== activeSemester.id && !isActiveSemesterFinished) {
+                    messageApi.warning('Le trimestre actif n\'est pas encore terminé. Veuillez d\'abord terminer le trimestre actif.');
+                    return;
+                  }
+                  setSelectedSemester(value);
+                }}
+                className="modern-select"
+                showSearch
+                optionFilterProp="children"
+                allowClear
+                disabled={!selectedAcademicYear}
+                style={{ cursor: 'pointer', width: '100%' }}
+              >
+                {semestersData?.map((semester: any) => (
+                  <Select.Option key={semester.id} value={semester.id}>
+                    {semester.name} {semester.id === activeSemester?.id && '(Actif)'}
+                  </Select.Option>
+                ))}
+              </Select>
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <Form.Item label="Matière" style={{ marginBottom: 0 }}>
+              <Select
+                placeholder="Sélectionnez une matière"
+                value={selectedSubject}
+                onChange={(value) => {
+                  setSelectedSubject(value);
+                  setSelectedClass('');
+                }}
+                className="modern-select"
+                showSearch
+                optionFilterProp="children"
+                allowClear
+                disabled={!selectedAcademicYear || !currentTeacherId}
+                style={{ cursor: 'pointer', width: '100%' }}
+              >
+                {uniqueSubjects.map((subject: any) => (
+                  <Select.Option key={subject.id} value={subject.id}>
+                    {subject.name}
+                  </Select.Option>
+                ))}
+              </Select>
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={12} md={8}>
+            <Form.Item label="Classe" style={{ marginBottom: 0 }}>
+              <Select
+                placeholder="Sélectionnez une classe"
+                value={selectedClass}
+                onChange={(value) => setSelectedClass(value)}
+                className="modern-select"
+                showSearch
+                optionFilterProp="children"
+                allowClear
+                disabled={!selectedSubject}
+                style={{ cursor: 'pointer', width: '100%' }}
+              >
+                {filteredAssignments.map((assignment: any) => (
+                  <Select.Option key={assignment.class.id} value={assignment.class.id}>
+                    {assignment.class.name}
+                  </Select.Option>
+                ))}
+              </Select>
+            </Form.Item>
+          </Col>
+        </Row>
+      </GlassCard>
+
+      {canAddGrade && studentsData && studentsData.length > 0 ? (
+        <GlassCard variant="glass" styles={{ body: { padding: '24px' } }}>
+          {/* Button to add/remove note columns */}
+          <Row gutter={[16, 16]} style={{ marginBottom: '16px' }} align="middle">
+            <Col xs={24} sm={12} md={8}>
+              <Text strong style={{ fontSize: '14px' }}>
+                Colonnes de notes : {numberOfNoteColumns}
+              </Text>
+            </Col>
+            <Col xs={24} sm={12} md={16}>
+              <Space wrap style={{ width: '100%', justifyContent: 'flex-end' }}>
+                {!selectedSemesterFinished && (
+                  <Button
+                    type="default"
+                    icon={<PlusOutlined />}
+                    onClick={() => setNumberOfNoteColumns(numberOfNoteColumns + 1)}
+                    className="modern-button-secondary-outline"
+                    style={{ borderRadius: '8px' }}
+                  >
+                    Ajouter une colonne
+                  </Button>
+                )}
+                {numberOfNoteColumns > 0 && !hasAnyGrade() && (
+                  <Button
+                    type="default"
+                    danger
+                    icon={<DeleteOutlined />}
+                    onClick={() => setNumberOfNoteColumns(Math.max(0, numberOfNoteColumns - 1))}
+                    className="modern-button-secondary-outline"
+                    style={{ borderRadius: '8px' }}
+                  >
+                    Retirer une colonne
+                  </Button>
+                )}
+              </Space>
+            </Col>
+          </Row>
+          <div className="modern-table">
+            <Table
+              dataSource={studentsData}
+              columns={columns}
+              rowKey="id"
+              pagination={false}
+              loading={gradesLoading}
+              scroll={{ x: 'max-content' }}
+            />
+          </div>
+        </GlassCard>
+      ) : canAddGrade && studentsData && studentsData.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title="Aucun élève trouvé dans cette classe"
+          description="Vérifiez que des élèves sont inscrits dans cette classe."
+        />
+      ) : (
+        <EmptyState
+          icon={BookOpen}
+          title="Sélectionnez les filtres"
+          description="Veuillez sélectionner l'année, le trimestre, la matière et la classe pour commencer."
+        />
+      )}
+
+      <Modal
+        title={
+          <Space>
+            <BookOpen className="h-5 w-5 text-role-primary" aria-hidden="true" />
+            <span>{editingGrade ? 'Modifier la Note' : 'Ajouter une Note'}</span>
+          </Space>
+        }
+        open={isModalOpen}
+        onOk={handleSubmit}
+        onCancel={handleCloseModal}
+        confirmLoading={createMutation.isPending || updateMutation.isPending}
+        okText={editingGrade ? 'Modifier' : 'Ajouter'}
+        cancelText="Annuler"
+        width={500}
+        okButtonProps={{
+          className: 'modern-button-primary',
+        }}
+        cancelButtonProps={{
+          className: 'modern-button-secondary-outline',
+        }}
+      >
+        <Form
+          form={form}
+          layout="vertical"
+          style={{ marginTop: '24px' }}
+        >
+          <Form.Item
+            name="studentId"
+            hidden
+            rules={[{ required: true, message: 'L\'élève est obligatoire' }]}
+          >
+            <Input type="hidden" />
+          </Form.Item>
+
+          <Form.Item
+            name="evaluationTypeId"
+            label="Type d'évaluation"
+            rules={[
+              { required: true, message: 'Le type d\'évaluation est obligatoire' },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  if (!value) return Promise.resolve();
+                  
+                  // For new grades, validate against column type and used types
+                  if (!editingGrade && currentColumnIndex !== null) {
+                    const columnEvaluationTypeId = getEvaluationTypeForColumn(currentColumnIndex);
+                    const usedTypes = getUsedEvaluationTypes(currentColumnIndex);
+                    
+                    // Check if the selected type is already used in another column
+                    if (usedTypes.has(value)) {
+                      return Promise.reject(new Error('Ce type d\'évaluation est déjà utilisé dans une autre colonne'));
+                    }
+                    
+                    // Check if the selected type matches the column's type (if it exists)
+                    if (columnEvaluationTypeId && value !== columnEvaluationTypeId) {
+                      return Promise.reject(new Error('Le type d\'évaluation doit être le même que celui utilisé dans cette colonne'));
+                    }
+                  }
+                  
+                  return Promise.resolve();
+                },
+              }),
+            ]}
+          >
+            <Select
+              placeholder="Sélectionnez un type d'évaluation"
+              showSearch
+              optionFilterProp="children"
+              optionLabelProp="label"
+              disabled={editingGrade ? false : currentColumnIndex !== null && getEvaluationTypeForColumn(currentColumnIndex) !== null}
+            >
+              {evaluationTypesData?.filter((type: any) => {
+                // For new grades, filter out types already used in other columns
+                if (!editingGrade && currentColumnIndex !== null) {
+                  const usedTypes = getUsedEvaluationTypes(currentColumnIndex);
+                  return !usedTypes.has(type.id);
+                }
+                return true;
+              }).map((type: any) => (
+                <Select.Option key={type.id} value={type.id} label={type.name}>
+                  {type.name}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            name="maxNote"
+            label="Note sur"
+            rules={[
+              { required: true, message: 'La note maximale est obligatoire' },
+            ]}
+          >
+            <Select placeholder="Sélectionnez la note maximale">
+              <Select.Option value={10}>10</Select.Option>
+              <Select.Option value={20}>20</Select.Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            name="note"
+            label="Note"
+            rules={[
+              { required: true, message: 'La note est obligatoire' },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  const maxNote = getFieldValue('maxNote');
+                  if (!value || !maxNote) {
+                    return Promise.resolve();
+                  }
+                  if (value < 0 || value > maxNote) {
+                    return Promise.reject(new Error(`La note doit être entre 0 et ${maxNote}`));
+                  }
+                  return Promise.resolve();
+                },
+              }),
+            ]}
+          >
+            <InputNumber
+              style={{ width: '100%' }}
+              min={0}
+              max={20}
+              step={0.5}
+              placeholder="Entrez la note"
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  );
+}
+

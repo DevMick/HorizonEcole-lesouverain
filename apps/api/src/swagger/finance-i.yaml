@@ -1,0 +1,612 @@
+openapi: 3.0.3
+info:
+  title: Finance I - School Fees & Payment Schedules API
+  description: API pour la gestion des tarifs scolaires et échéanciers de paiement
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:4001/api
+    description: Development server
+
+security:
+  - BearerAuth: []
+
+paths:
+  /school-fees:
+    get:
+      summary: Liste des tarifs scolaires
+      tags: [School Fees]
+      parameters:
+        - name: academicYearId
+          in: query
+          schema:
+            type: string
+        - name: level
+          in: query
+          schema:
+            type: string
+            enum: [SIXIEME, CINQUIEME, QUATRIEME, TROISIEME]
+        - name: feeType
+          in: query
+          schema:
+            type: string
+            enum: [INSCRIPTION, SCOLARITE_MENSUELLE, CANTINE, TRANSPORT, UNIFORME, ACTIVITE, AUTRE]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Liste des tarifs récupérée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchoolFeesListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: Créer un tarif scolaire
+      tags: [School Fees]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSchoolFeeRequest'
+      responses:
+        '201':
+          description: Tarif créé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchoolFeeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /school-fees/stats:
+    get:
+      summary: Statistiques des tarifs
+      tags: [School Fees]
+      responses:
+        '200':
+          description: Statistiques récupérées
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchoolFeeStatsResponse'
+
+  /school-fees/by-level:
+    get:
+      summary: Tarifs par niveau
+      tags: [School Fees]
+      parameters:
+        - name: academicYearId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: level
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tarifs par niveau
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeesByLevelResponse'
+
+  /school-fees/{id}:
+    get:
+      summary: Détail d'un tarif
+      tags: [School Fees]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Détail du tarif
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchoolFeeResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: Modifier un tarif
+      tags: [School Fees]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSchoolFeeRequest'
+      responses:
+        '200':
+          description: Tarif modifié
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchoolFeeResponse'
+
+    delete:
+      summary: Supprimer un tarif
+      tags: [School Fees]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tarif supprimé
+        '400':
+          description: Cannot delete - has associated schedules
+
+  /payment-schedules:
+    get:
+      summary: Liste des échéanciers
+      tags: [Payment Schedules]
+      parameters:
+        - name: studentId
+          in: query
+          schema:
+            type: string
+        - name: academicYearId
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [PENDING, PARTIAL, PAID, OVERDUE, CANCELLED]
+      responses:
+        '200':
+          description: Liste des échéanciers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentSchedulesListResponse'
+
+    post:
+      summary: Créer un échéancier
+      tags: [Payment Schedules]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaymentScheduleRequest'
+      responses:
+        '201':
+          description: Échéancier créé
+
+  /payment-schedules/generate:
+    post:
+      summary: Générer échéancier pour un élève
+      tags: [Payment Schedules]
+      description: Génère automatiquement les échéanciers de paiement pour un élève basé sur les tarifs de son niveau
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateScheduleRequest'
+      responses:
+        '201':
+          description: Échéanciers générés
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateScheduleResponse'
+        '400':
+          description: Échéanciers déjà existants ou élève non trouvé
+
+  /payment-schedules/stats:
+    get:
+      summary: Statistiques des échéanciers
+      tags: [Payment Schedules]
+      parameters:
+        - name: academicYearId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Statistiques
+
+  /payment-schedules/student/{studentId}/summary:
+    get:
+      summary: Résumé de paiement d'un élève
+      tags: [Payment Schedules]
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: academicYearId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Résumé de paiement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentPaymentSummary'
+
+  /payment-schedules/update-overdue:
+    post:
+      summary: Mettre à jour les échéanciers en retard
+      tags: [Payment Schedules]
+      responses:
+        '200':
+          description: Échéanciers mis à jour
+
+  /payment-schedules/{id}:
+    get:
+      summary: Détail d'un échéancier
+      tags: [Payment Schedules]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Détail de l'échéancier
+
+    put:
+      summary: Modifier un échéancier
+      tags: [Payment Schedules]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePaymentScheduleRequest'
+      responses:
+        '200':
+          description: Échéancier modifié
+
+    delete:
+      summary: Supprimer un échéancier
+      tags: [Payment Schedules]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Échéancier supprimé
+        '400':
+          description: Cannot delete - has payments
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    SchoolFee:
+      type: object
+      properties:
+        id:
+          type: string
+        academicYearId:
+          type: string
+        level:
+          type: string
+          enum: [SIXIEME, CINQUIEME, QUATRIEME, TROISIEME]
+        feeType:
+          type: string
+          enum: [INSCRIPTION, SCOLARITE_MENSUELLE, CANTINE, TRANSPORT, UNIFORME, ACTIVITE, AUTRE]
+        amount:
+          type: number
+        description:
+          type: string
+
+    CreateSchoolFeeRequest:
+      type: object
+      required:
+        - academicYearId
+        - level
+        - feeType
+        - amount
+      properties:
+        academicYearId:
+          type: string
+        level:
+          type: string
+        feeType:
+          type: string
+        amount:
+          type: number
+        description:
+          type: string
+
+    UpdateSchoolFeeRequest:
+      type: object
+      properties:
+        amount:
+          type: number
+        description:
+          type: string
+
+    PaymentSchedule:
+      type: object
+      properties:
+        id:
+          type: string
+        studentId:
+          type: string
+        academicYearId:
+          type: string
+        feeType:
+          type: string
+        totalAmount:
+          type: number
+        paidAmount:
+          type: number
+        remainingAmount:
+          type: number
+        dueDate:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [PENDING, PARTIAL, PAID, OVERDUE, CANCELLED]
+        discountPercentage:
+          type: number
+        discountReason:
+          type: string
+
+    CreatePaymentScheduleRequest:
+      type: object
+      required:
+        - studentId
+        - academicYearId
+        - feeType
+        - totalAmount
+        - dueDate
+      properties:
+        studentId:
+          type: string
+        academicYearId:
+          type: string
+        feeType:
+          type: string
+        totalAmount:
+          type: number
+        dueDate:
+          type: string
+        discountPercentage:
+          type: number
+        discountReason:
+          type: string
+
+    UpdatePaymentScheduleRequest:
+      type: object
+      properties:
+        totalAmount:
+          type: number
+        dueDate:
+          type: string
+        status:
+          type: string
+        discountPercentage:
+          type: number
+
+    GenerateScheduleRequest:
+      type: object
+      required:
+        - studentId
+        - academicYearId
+      properties:
+        studentId:
+          type: string
+        academicYearId:
+          type: string
+        includeOptionalFees:
+          type: boolean
+          default: false
+        installments:
+          type: integer
+          minimum: 1
+          maximum: 12
+          default: 1
+        customDiscountPercentage:
+          type: number
+          minimum: 0
+          maximum: 100
+          default: 0
+        customDiscountReason:
+          type: string
+
+    GenerateScheduleResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            studentId:
+              type: string
+            academicYearId:
+              type: string
+            schedulesCreated:
+              type: integer
+            totalAmount:
+              type: number
+            schedules:
+              type: array
+              items:
+                $ref: '#/components/schemas/PaymentSchedule'
+
+    StudentPaymentSummary:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            totalDue:
+              type: number
+            totalPaid:
+              type: number
+            totalRemaining:
+              type: number
+            schedulesByStatus:
+              type: object
+            schedules:
+              type: array
+
+    SchoolFeesListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SchoolFee'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    SchoolFeeResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/SchoolFee'
+
+    SchoolFeeStatsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+
+    FeesByLevelResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            fees:
+              type: array
+            breakdown:
+              type: object
+            total:
+              type: number
+
+    PaymentSchedulesListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentSchedule'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+tags:
+  - name: School Fees
+    description: Gestion des tarifs scolaires
+  - name: Payment Schedules
+    description: Gestion des échéanciers de paiement

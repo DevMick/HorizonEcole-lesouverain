@@ -1,0 +1,1186 @@
+paths:
+  /students:
+    get:
+      tags:
+        - Students
+      summary: Get all students
+      description: Retrieve a paginated list of students with optional filtering
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+          description: Page number
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+          description: Number of items per page
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: Search term for name, student number, or contact info
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [ACTIVE, INACTIVE, GRADUATED, TRANSFERRED, EXPELLED]
+          description: Filter by student status
+        - in: query
+          name: classId
+          schema:
+            type: string
+          description: Filter by class ID
+        - in: query
+          name: gender
+          schema:
+            type: string
+            enum: [MALE, FEMALE]
+          description: Filter by gender
+      responses:
+        200:
+          description: Students retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Student'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags:
+        - Students
+      summary: Create a new student
+      description: Create a new student record
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStudentRequest'
+      responses:
+        201:
+          description: Student created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Student'
+                  message:
+                    type: string
+        400:
+          $ref: '#/components/responses/BadRequest'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+
+  /students/{id}:
+    get:
+      tags:
+        - Students
+      summary: Get student by ID
+      description: Retrieve a specific student with all related information
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Student ID
+      responses:
+        200:
+          description: Student retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/StudentWithRelations'
+        404:
+          $ref: '#/components/responses/NotFound'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+
+    put:
+      tags:
+        - Students
+      summary: Update student
+      description: Update an existing student record
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Student ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStudentRequest'
+      responses:
+        200:
+          description: Student updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Student'
+                  message:
+                    type: string
+        400:
+          $ref: '#/components/responses/BadRequest'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Students
+      summary: Delete student
+      description: Delete a student record
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Student ID
+      responses:
+        200:
+          description: Student deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+
+  /students/{id}/avatar:
+    post:
+      tags:
+        - Students
+      summary: Upload student avatar
+      description: Upload an avatar image for a student
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Student ID
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                avatar:
+                  type: string
+                  format: binary
+                  description: Avatar image file
+      responses:
+        200:
+          description: Avatar uploaded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      avatarUrl:
+                        type: string
+                  message:
+                    type: string
+        400:
+          $ref: '#/components/responses/BadRequest'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+
+  /students/{id}/parents:
+    post:
+      tags:
+        - Students
+      summary: Link parent to student
+      description: Create a relationship between a student and a parent
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Student ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - parentId
+                - relation
+              properties:
+                parentId:
+                  type: string
+                  description: Parent ID
+                relation:
+                  type: string
+                  enum: [PERE, MERE, TUTEUR, AUTRE]
+                  description: Relationship type
+      responses:
+        201:
+          description: Parent linked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/StudentParent'
+                  message:
+                    type: string
+        400:
+          $ref: '#/components/responses/BadRequest'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+
+  /students/{id}/parents/{parentId}:
+    delete:
+      tags:
+        - Students
+      summary: Unlink parent from student
+      description: Remove the relationship between a student and a parent
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Student ID
+        - in: path
+          name: parentId
+          required: true
+          schema:
+            type: string
+          description: Parent ID
+      responses:
+        200:
+          description: Parent unlinked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        400:
+          $ref: '#/components/responses/BadRequest'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+
+  /students/stats/overview:
+    get:
+      tags:
+        - Students
+      summary: Get student statistics
+      description: Get overview statistics for students
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      totalStudents:
+                        type: integer
+                      activeStudents:
+                        type: integer
+                      studentsByGender:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            gender:
+                              type: string
+                            _count:
+                              type: object
+                              properties:
+                                gender:
+                                  type: integer
+                      studentsByClass:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            classId:
+                              type: string
+                            _count:
+                              type: object
+                              properties:
+                                classId:
+                                  type: integer
+        401:
+          $ref: '#/components/responses/Unauthorized'
+
+  /parents:
+    get:
+      tags:
+        - Parents
+      summary: Get all parents
+      description: Retrieve a paginated list of parents with optional filtering
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+          description: Page number
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+          description: Number of items per page
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: Search term for name, phone, or email
+        - in: query
+          name: relation
+          schema:
+            type: string
+            enum: [PERE, MERE, TUTEUR, AUTRE]
+          description: Filter by relation type
+        - in: query
+          name: isPrimaryContact
+          schema:
+            type: boolean
+          description: Filter by primary contact status
+        - in: query
+          name: isFinancialResponsible
+          schema:
+            type: boolean
+          description: Filter by financial responsibility status
+      responses:
+        200:
+          description: Parents retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Parent'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags:
+        - Parents
+      summary: Create a new parent
+      description: Create a new parent record
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateParentRequest'
+      responses:
+        201:
+          description: Parent created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Parent'
+                  message:
+                    type: string
+        400:
+          $ref: '#/components/responses/BadRequest'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+
+  /parents/{id}:
+    get:
+      tags:
+        - Parents
+      summary: Get parent by ID
+      description: Retrieve a specific parent with all related information
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Parent ID
+      responses:
+        200:
+          description: Parent retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/ParentWithRelations'
+        404:
+          $ref: '#/components/responses/NotFound'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+
+    put:
+      tags:
+        - Parents
+      summary: Update parent
+      description: Update an existing parent record
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Parent ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateParentRequest'
+      responses:
+        200:
+          description: Parent updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Parent'
+                  message:
+                    type: string
+        400:
+          $ref: '#/components/responses/BadRequest'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Parents
+      summary: Delete parent
+      description: Delete a parent record
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Parent ID
+      responses:
+        200:
+          description: Parent deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        400:
+          $ref: '#/components/responses/BadRequest'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+
+  /parents/{id}/avatar:
+    post:
+      tags:
+        - Parents
+      summary: Upload parent avatar
+      description: Upload an avatar image for a parent
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Parent ID
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                avatar:
+                  type: string
+                  format: binary
+                  description: Avatar image file
+      responses:
+        200:
+          description: Avatar uploaded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      avatarUrl:
+                        type: string
+                  message:
+                    type: string
+        400:
+          $ref: '#/components/responses/BadRequest'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+
+  /parents/search/{query}:
+    get:
+      tags:
+        - Parents
+      summary: Search parents
+      description: Search parents by name, phone, or email
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: query
+          required: true
+          schema:
+            type: string
+          description: Search query
+      responses:
+        200:
+          description: Search results retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        firstName:
+                          type: string
+                        lastName:
+                          type: string
+                        phone:
+                          type: string
+                        email:
+                          type: string
+                        relation:
+                          type: string
+                          enum: [PERE, MERE, TUTEUR, AUTRE]
+        401:
+          $ref: '#/components/responses/Unauthorized'
+
+  /parents/stats/overview:
+    get:
+      tags:
+        - Parents
+      summary: Get parent statistics
+      description: Get overview statistics for parents
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      totalParents:
+                        type: integer
+                      parentsByRelation:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            relation:
+                              type: string
+                              enum: [PERE, MERE, TUTEUR, AUTRE]
+                            _count:
+                              type: object
+                              properties:
+                                relation:
+                                  type: integer
+                      primaryContacts:
+                        type: integer
+                      financialResponsibles:
+                        type: integer
+        401:
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  schemas:
+    Student:
+      type: object
+      properties:
+        id:
+          type: string
+        studentNumber:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        dateOfBirth:
+          type: string
+          format: date
+        placeOfBirth:
+          type: string
+        gender:
+          type: string
+          enum: [MALE, FEMALE]
+        nationality:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        address:
+          type: string
+        avatarUrl:
+          type: string
+        bloodType:
+          type: string
+        allergies:
+          type: string
+        medicalNotes:
+          type: string
+        classId:
+          type: string
+        enrollmentDate:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE, GRADUATED, TRANSFERRED, EXPELLED]
+        birthCertificateUrl:
+          type: string
+        vaccinationCardUrl:
+          type: string
+        previousSchoolReportUrl:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        class:
+          type: object
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            level:
+              type: string
+        studentParents:
+          type: array
+          items:
+            $ref: '#/components/schemas/StudentParent'
+
+    StudentWithRelations:
+      allOf:
+        - $ref: '#/components/schemas/Student'
+        - type: object
+          properties:
+            grades:
+              type: array
+              items:
+                type: object
+            payments:
+              type: array
+              items:
+                type: object
+
+    Parent:
+      type: object
+      properties:
+        id:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        relation:
+          type: string
+          enum: [PERE, MERE, TUTEUR, AUTRE]
+        phone:
+          type: string
+        email:
+          type: string
+        address:
+          type: string
+        profession:
+          type: string
+        workplace:
+          type: string
+        avatarUrl:
+          type: string
+        isPrimaryContact:
+          type: boolean
+        isFinancialResponsible:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        studentParents:
+          type: array
+          items:
+            $ref: '#/components/schemas/StudentParent'
+
+    ParentWithRelations:
+      allOf:
+        - $ref: '#/components/schemas/Parent'
+        - type: object
+          properties:
+            studentParents:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  relation:
+                    type: string
+                  student:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      studentNumber:
+                        type: string
+                      firstName:
+                        type: string
+                      lastName:
+                        type: string
+                      class:
+                        type: object
+
+    StudentParent:
+      type: object
+      properties:
+        id:
+          type: string
+        studentId:
+          type: string
+        parentId:
+          type: string
+        relation:
+          type: string
+          enum: [PERE, MERE, TUTEUR, AUTRE]
+        createdAt:
+          type: string
+          format: date-time
+        parent:
+          $ref: '#/components/schemas/Parent'
+
+    CreateStudentRequest:
+      type: object
+      required:
+        - studentNumber
+        - firstName
+        - lastName
+        - dateOfBirth
+        - gender
+        - enrollmentDate
+      properties:
+        studentNumber:
+          type: string
+          description: Unique student number
+        firstName:
+          type: string
+          minLength: 2
+        lastName:
+          type: string
+          minLength: 2
+        dateOfBirth:
+          type: string
+          format: date
+        placeOfBirth:
+          type: string
+        gender:
+          type: string
+          enum: [MALE, FEMALE]
+        nationality:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+          format: email
+        address:
+          type: string
+        bloodType:
+          type: string
+        allergies:
+          type: string
+        medicalNotes:
+          type: string
+        classId:
+          type: string
+        enrollmentDate:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE, GRADUATED, TRANSFERRED, EXPELLED]
+          default: ACTIVE
+        birthCertificateUrl:
+          type: string
+        vaccinationCardUrl:
+          type: string
+        previousSchoolReportUrl:
+          type: string
+
+    UpdateStudentRequest:
+      type: object
+      properties:
+        studentNumber:
+          type: string
+        firstName:
+          type: string
+          minLength: 2
+        lastName:
+          type: string
+          minLength: 2
+        dateOfBirth:
+          type: string
+          format: date
+        placeOfBirth:
+          type: string
+        gender:
+          type: string
+          enum: [MALE, FEMALE]
+        nationality:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+          format: email
+        address:
+          type: string
+        bloodType:
+          type: string
+        allergies:
+          type: string
+        medicalNotes:
+          type: string
+        classId:
+          type: string
+        enrollmentDate:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE, GRADUATED, TRANSFERRED, EXPELLED]
+        birthCertificateUrl:
+          type: string
+        vaccinationCardUrl:
+          type: string
+        previousSchoolReportUrl:
+          type: string
+
+    CreateParentRequest:
+      type: object
+      required:
+        - firstName
+        - lastName
+        - relation
+        - phone
+      properties:
+        firstName:
+          type: string
+          minLength: 2
+        lastName:
+          type: string
+          minLength: 2
+        relation:
+          type: string
+          enum: [PERE, MERE, TUTEUR, AUTRE]
+        phone:
+          type: string
+          minLength: 8
+        email:
+          type: string
+          format: email
+        address:
+          type: string
+        profession:
+          type: string
+        workplace:
+          type: string
+        isPrimaryContact:
+          type: boolean
+          default: false
+        isFinancialResponsible:
+          type: boolean
+          default: false
+
+    UpdateParentRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+          minLength: 2
+        lastName:
+          type: string
+          minLength: 2
+        relation:
+          type: string
+          enum: [PERE, MERE, TUTEUR, AUTRE]
+        phone:
+          type: string
+          minLength: 8
+        email:
+          type: string
+          format: email
+        address:
+          type: string
+        profession:
+          type: string
+        workplace:
+          type: string
+        isPrimaryContact:
+          type: boolean
+        isFinancialResponsible:
+          type: boolean
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: string
+              message:
+                type: string
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: string
+                example: "Unauthorized"
+
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: string
+                example: "Forbidden"
+
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: string
+                example: "Not found"
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: string
+              message:
+                type: string

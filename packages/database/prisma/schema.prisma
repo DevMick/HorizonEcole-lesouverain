@@ -1,0 +1,1604 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AcademicYear {
+  id        String   @id
+  name      String   @unique @db.VarChar(9)
+  startYear Int      @map("start_year")
+  endYear   Int      @map("end_year")
+  isCurrent Boolean  @default(false) @map("is_current")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  budgets              budgets[]
+  budget_lines         budget_lines[]
+  schedules            schedules[]
+  inscriptions         inscriptions[]
+  student_payments     student_payments[]
+  custom_payment_plans custom_payment_plans[]
+  timetables           class_timetables[]
+  teacher_assignments  teacher_class_assignments[]
+  semesters            semesters[]
+  grades               grades[]
+  student_absences     student_absences[]
+  class_main_teachers  class_main_teachers[]
+  attendance_sessions  attendance_sessions[]
+  evaluation_types     evaluation_types[]
+  conduct_settings     conduct_settings?
+  conduct_grades       conduct_grades[]
+  conduct_overrides    conduct_absence_overrides[]
+  bulletin_releases    bulletin_releases[]
+
+  @@map("academic_years")
+}
+
+model attendance_summaries {
+  id              String   @id
+  student_id      String
+  month           Int
+  year            Int
+  total_days      Int
+  present_days    Int      @default(0)
+  absent_days     Int      @default(0)
+  late_days       Int      @default(0)
+  excused_days    Int      @default(0)
+  attendance_rate Decimal? @db.Decimal(5, 2)
+  created_at      DateTime @default(now())
+  student         Student  @relation(fields: [student_id], references: [id], onDelete: Cascade)
+
+  @@unique([student_id, month, year])
+}
+
+model attendances {
+  id                         String           @id
+  student_id                 String
+  class_id                   String
+  date                       DateTime         @db.Date
+  period                     TimePeriod
+  status                     AttendanceStatus
+  excuse                     String?
+  is_justified               Boolean          @default(false)
+  justification_document_url String?
+  recorded_by                String?
+  recorded_at                DateTime         @default(now())
+  class                      SchoolClass      @relation(fields: [class_id], references: [id], onDelete: Cascade)
+  recordedBy                 User?            @relation(fields: [recorded_by], references: [id], onDelete: SetNull)
+  student                    Student          @relation(fields: [student_id], references: [id], onDelete: Cascade)
+
+  @@unique([student_id, date, period])
+}
+
+// Appel par séance de cours (matière) — remplace l'appel demi-journée pour
+// l'enseignant. Une séance = un appel pour (année, classe, matière, enseignant)
+// à une date + créneau (dérivé de class_timetables). session_number = « Séance N ».
+model attendance_sessions {
+  id               String   @id @default(uuid())
+  academic_year_id String
+  class_id         String
+  subject_id       String
+  teacher_id       String
+  date             DateTime @db.Date
+  start_time       String?  @db.VarChar(10)
+  end_time         String?  @db.VarChar(10)
+  timetable_id     String?
+  session_number   Int      @default(1)
+  notes            String?
+  recorded_by      String?
+  created_at       DateTime @default(now())
+  updated_at       DateTime @default(now()) @updatedAt
+
+  academicYear AcademicYear         @relation(fields: [academic_year_id], references: [id], onDelete: Cascade)
+  class        SchoolClass          @relation(fields: [class_id], references: [id], onDelete: Cascade)
+  subject      subjects             @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  teacher      teachers             @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+  recordedBy   User?                @relation(fields: [recorded_by], references: [id], onDelete: SetNull)
+  records      attendance_records[]
+
+  @@unique([academic_year_id, class_id, subject_id, teacher_id, date, start_time])
+  @@index([academic_year_id, class_id, subject_id])
+  @@index([teacher_id])
+  @@index([date])
+  @@map("attendance_sessions")
+}
+
+model attendance_records {
+  id           String           @id @default(uuid())
+  session_id   String
+  student_id   String
+  status       AttendanceStatus
+  excuse       String?
+  is_justified Boolean          @default(false)
+  created_at   DateTime         @default(now())
+
+  session attendance_sessions @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  student Student             @relation(fields: [student_id], references: [id], onDelete: Cascade)
+
+  @@unique([session_id, student_id])
+  @@index([student_id])
+  @@map("attendance_records")
+}
+
+/// Rattrapage d'une séance qui n'a pas eu lieu (§9.6).
+///
+/// Une ligne = la décision de l'enseignant sur **une occurrence manquée**
+/// précise, identifiée par (créneau, date d'origine) — d'où la contrainte
+/// d'unicité. Deux décisions possibles :
+///  - SCHEDULED : reprogrammée à `makeup_date` (+ horaires, qui peuvent différer
+///    de ceux du créneau) ;
+///  - DISMISSED : écartée (« pas de cours ce jour » : férié, vacances). Sert de
+///    mémoire — sans elle, l'occurrence réapparaîtrait indéfiniment comme
+///    manquée, faute de calendrier de fermeture dans le système.
+///
+/// Classe/matière/enseignant ne sont pas dupliqués : ils se dérivent du créneau,
+/// qui reste la source de vérité (cf. attendance_sessions).
+model attendance_makeup_sessions {
+  id            String    @id @default(uuid())
+  timetable_id  String
+  original_date DateTime  @db.Date
+  makeup_date   DateTime? @db.Date
+  start_time    String?   @db.VarChar(10)
+  end_time      String?   @db.VarChar(10)
+  status        String    @db.VarChar(20)
+  reason        String?
+  created_by    String?
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @default(now()) @updatedAt
+
+  timetable class_timetables @relation(fields: [timetable_id], references: [id], onDelete: Cascade)
+  creator   User?            @relation(fields: [created_by], references: [id], onDelete: SetNull)
+
+  @@unique([timetable_id, original_date])
+  @@index([makeup_date])
+  @@map("attendance_makeup_sessions")
+}
+
+/// Demande de déplacement d'un cours à venir, soumise par l'enseignant et
+/// arbitrée par l'administration.
+///
+/// Distincte de `attendance_makeup_sessions` : une demande n'occupe rien dans
+/// l'agenda tant qu'elle est `PENDING` — le cours d'origine reste appelable
+/// normalement. Ce n'est qu'à l'approbation (`APPROVED`) qu'une ligne
+/// `attendance_makeup_sessions` (statut `MOVED`) est créée, à la date demandée
+/// ou à celle choisie par l'administration si elle a préféré en proposer une
+/// autre (`decided_*`, qui prévaut alors sur `requested_*`).
+model attendance_move_requests {
+  id                    String    @id @default(uuid())
+  timetable_id          String
+  original_date         DateTime  @db.Date
+  requested_date        DateTime  @db.Date
+  requested_start_time  String    @db.VarChar(10)
+  requested_end_time    String    @db.VarChar(10)
+  reason                String?
+  status                String    @default("PENDING") @db.VarChar(20)
+  decided_date          DateTime? @db.Date
+  decided_start_time    String?   @db.VarChar(10)
+  decided_end_time      String?   @db.VarChar(10)
+  admin_note            String?
+  created_by            String?
+  decided_by            String?
+  decided_at            DateTime?
+  created_at            DateTime  @default(now())
+  updated_at            DateTime  @default(now()) @updatedAt
+
+  timetable class_timetables @relation(fields: [timetable_id], references: [id], onDelete: Cascade)
+  requester User?            @relation("MoveRequestRequester", fields: [created_by], references: [id], onDelete: SetNull)
+  decider   User?            @relation("MoveRequestDecider", fields: [decided_by], references: [id], onDelete: SetNull)
+
+  @@unique([timetable_id, original_date])
+  @@index([status])
+  @@map("attendance_move_requests")
+}
+
+model audit_logs {
+  id            String   @id
+  user_id       String?
+  action        String   @db.VarChar(100)
+  resource_type String   @db.VarChar(50)
+  resource_id   String?
+  old_values    Json?
+  new_values    Json?
+  ip_address    String?  @db.Inet
+  user_agent    String?
+  success       Boolean  @default(true)
+  error_message String?
+  created_at    DateTime @default(now())
+  user          User?    @relation(fields: [user_id], references: [id])
+
+  @@index([resource_type, resource_id])
+  @@index([user_id, created_at(sort: Desc)])
+}
+
+model budgets {
+  id               String          @id
+  academic_year_id String
+  category         ExpenseCategory
+  planned_amount   Decimal         @db.Decimal(10, 2)
+  spent_amount     Decimal         @default(0) @db.Decimal(10, 2)
+  remaining_amount Decimal         @db.Decimal(10, 2)
+  notes            String?
+  created_at       DateTime        @default(now())
+  academicYear     AcademicYear    @relation(fields: [academic_year_id], references: [id], onDelete: Cascade)
+
+  @@unique([academic_year_id, category])
+}
+
+model budget_lines {
+  id               String                @id @default(uuid())
+  academic_year_id String
+  title            String                @db.VarChar(200)
+  amount           Decimal               @db.Decimal(10, 2)
+  type             BudgetType
+  parent_id        String?
+  created_at       DateTime              @default(now())
+  academicYear     AcademicYear          @relation(fields: [academic_year_id], references: [id], onDelete: Cascade)
+  parent           budget_lines?         @relation("BudgetLineParent", fields: [parent_id], references: [id], onDelete: Cascade)
+  children         budget_lines[]        @relation("BudgetLineParent")
+  transactions     budget_transactions[]
+
+  @@index([academic_year_id])
+  @@index([parent_id])
+  @@index([type])
+  @@map("budget_lines")
+}
+
+model budget_transactions {
+  id                    String       @id @default(uuid())
+  budget_line_id        String
+  amount                Decimal      @db.Decimal(10, 2)
+  transaction_date      DateTime     @db.Date
+  description           String?      @db.Text
+  justificatif_url      String?      @db.VarChar(500)
+  justificatif_filename String?      @db.VarChar(255)
+  created_at            DateTime     @default(now())
+  created_by            String?
+  budgetLine            budget_lines @relation(fields: [budget_line_id], references: [id], onDelete: Cascade)
+  creator               User?        @relation("BudgetTransactionCreator", fields: [created_by], references: [id], onDelete: SetNull)
+
+  @@index([budget_line_id])
+  @@index([transaction_date])
+  @@index([created_by])
+  @@map("budget_transactions")
+}
+
+model class_subjects {
+  id             String      @id
+  class_id       String
+  subject_id     String
+  teacher_id     String?
+  hours_per_week Int         @default(1)
+  coefficient    Int         @default(1)
+  class          SchoolClass @relation(fields: [class_id], references: [id], onDelete: Cascade)
+  subjects       subjects    @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+
+  @@unique([class_id, subject_id])
+}
+
+model SchoolClass {
+  id        String   @id
+  name      String   @unique @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  attendances          attendances[]
+  classSubjects        class_subjects[]
+  inscriptions         inscriptions[]
+  schedules            schedules[]
+  schoolFeeRates       school_fee_rates[]
+  students             Student[]
+  timetables           class_timetables[]
+  teacher_assignments  teacher_class_assignments[]
+  custom_payment_plans custom_payment_plans[]
+  grades               grades[]
+  student_absences     student_absences[]
+  main_teachers        class_main_teachers[]
+  attendance_sessions  attendance_sessions[]
+  evaluation_types     evaluation_types[]
+  conduct_grades       conduct_grades[]
+  conduct_overrides    conduct_absence_overrides[]
+  bulletin_releases    bulletin_releases[]
+
+  @@map("classes")
+}
+
+model disciplinary_incidents {
+  id          String           @id
+  student_id  String
+  date        DateTime         @db.Date
+  time        DateTime?        @db.Time(6)
+  location    String?          @db.VarChar(100)
+  description String
+  severity    IncidentSeverity
+  reported_by String?
+  witnesses   String?
+  created_at  DateTime         @default(now())
+  student     Student          @relation(fields: [student_id], references: [id], onDelete: Cascade)
+}
+
+model expenses {
+  id                String          @id
+  category          ExpenseCategory
+  amount            Decimal         @db.Decimal(10, 2)
+  date              DateTime        @db.Date
+  description       String
+  supplier_name     String?         @db.VarChar(200)
+  invoice_number    String?         @db.VarChar(100)
+  invoice_url       String?
+  payment_method    PaymentMethod?
+  payment_reference String?         @db.VarChar(100)
+  status            ExpenseStatus   @default(DRAFT)
+  approved_by       String?
+  approved_at       DateTime?
+  recorded_by       String?
+  created_at        DateTime        @default(now())
+  approvedBy        User?           @relation("expenses_approved_byTousers", fields: [approved_by], references: [id])
+  recordedBy        User?           @relation("expenses_recorded_byTousers", fields: [recorded_by], references: [id])
+}
+
+model inscriptions {
+  id                String       @id
+  academic_year_id  String
+  class_id          String
+  student_id        String
+  created_at        DateTime     @default(now())
+  updated_at        DateTime     @default(now())
+  academicYear      AcademicYear @relation(fields: [academic_year_id], references: [id], onDelete: Cascade)
+  class             SchoolClass  @relation(fields: [class_id], references: [id], onDelete: Cascade)
+  student           Student      @relation(fields: [student_id], references: [id], onDelete: Cascade)
+
+  @@unique([student_id, academic_year_id])
+  @@index([academic_year_id])
+  @@index([class_id])
+  @@index([student_id])
+}
+
+model parents {
+  id                       String            @id
+  user_id                  String?
+  first_name               String            @db.VarChar(100)
+  last_name                String            @db.VarChar(100)
+  relation                 ParentRelation
+  phone                    String            @db.VarChar(20)
+  email                    String?           @db.VarChar(255)
+  address                  String?
+  profession               String?           @db.VarChar(100)
+  workplace                String?           @db.VarChar(100)
+  avatar_url               String?
+  is_primary_contact       Boolean           @default(false)
+  is_financial_responsible Boolean           @default(false)
+  generated_password       String?           @map("generated_password") @db.VarChar(255)
+  odoo_partner_id          Int?
+  created_at               DateTime          @default(now())
+  updated_at               DateTime          @default(now())
+  user                     User?             @relation(fields: [user_id], references: [id])
+  student_parents          student_parents[]
+}
+
+model payment_types {
+  id                               String                             @id @default(uuid())
+  name                             String                             @unique @db.VarChar(100)
+  created_at                       DateTime                           @default(now()) @map("created_at")
+  school_fee_rate_details          school_fee_rate_details[]
+  custom_payment_plan_installments custom_payment_plan_installments[]
+
+  @@map("payment_types")
+}
+
+model RefreshToken {
+  id        String   @id
+  userId    String   @map("user_id")
+  token     String   @unique @db.VarChar(500)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model schedule_exceptions {
+  id                     String    @id
+  schedule_id            String
+  date                   DateTime  @db.Date
+  replacement_teacher_id String?
+  is_cancelled           Boolean   @default(false)
+  reason                 String?
+  created_by             String?
+  created_at             DateTime  @default(now())
+  creator                User?     @relation(fields: [created_by], references: [id])
+  schedules              schedules @relation(fields: [schedule_id], references: [id], onDelete: Cascade)
+}
+
+model schedules {
+  id                  String                @id
+  class_id            String
+  subject_id          String
+  teacher_id          String
+  day_of_week         Int
+  start_time          DateTime              @db.Time(6)
+  end_time            DateTime              @db.Time(6)
+  room                String?               @db.VarChar(50)
+  academic_year_id    String
+  is_active           Boolean               @default(true)
+  created_at          DateTime              @default(now())
+  schedule_exceptions schedule_exceptions[]
+  academicYear        AcademicYear          @relation(fields: [academic_year_id], references: [id], onDelete: Cascade)
+  class               SchoolClass           @relation(fields: [class_id], references: [id], onDelete: Cascade)
+  subjects            subjects              @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+}
+
+model school_fee_rate_details {
+  id                 String             @id
+  school_fee_rate_id String
+  payment_type_id    String
+  amount             Decimal            @db.Decimal(10, 2)
+  created_at         DateTime           @default(now())
+  updated_at         DateTime           @default(now())
+  payment_types      payment_types      @relation(fields: [payment_type_id], references: [id], onDelete: Cascade)
+  school_fee_rates   school_fee_rates   @relation(fields: [school_fee_rate_id], references: [id], onDelete: Cascade)
+  student_payments   student_payments[]
+
+  @@unique([school_fee_rate_id, payment_type_id])
+}
+
+model school_fee_rates {
+  id                      String                    @id
+  class_id                String
+  total_amount            Decimal                   @default(0) @db.Decimal(10, 2)
+  is_for_state_assigned   Boolean                   @default(false)
+  created_at              DateTime                  @default(now())
+  updated_at              DateTime                  @default(now())
+  school_fee_rate_details school_fee_rate_details[]
+  class                   SchoolClass               @relation(fields: [class_id], references: [id], onDelete: Cascade)
+
+  @@unique([class_id, is_for_state_assigned])
+  @@index([class_id])
+  @@index([is_for_state_assigned])
+}
+
+model student_parents {
+  id         String         @id
+  student_id String
+  parent_id  String
+  relation   ParentRelation
+  created_at DateTime       @default(now())
+  parents    parents        @relation(fields: [parent_id], references: [id], onDelete: Cascade)
+  student    Student        @relation(fields: [student_id], references: [id], onDelete: Cascade)
+
+  @@unique([student_id, parent_id])
+}
+
+model student_payments {
+  id                        String                  @id
+  student_id                String
+  academic_year_id          String
+  school_fee_rate_detail_id String
+  amount                    Decimal                 @db.Decimal(10, 2)
+  expected_amount           Decimal                 @db.Decimal(10, 2)
+  payment_date              DateTime                @db.Date
+  payment_method            PaymentMethod
+  receipt_number            String?                 @db.VarChar(50)
+  reference                 String?                 @db.VarChar(100)
+  notes                     String?
+  status                    PaymentStatus           @default(PENDING)
+  recorded_by               String?
+  created_at                DateTime                @default(now())
+  updated_at                DateTime                @default(now())
+  academicYear              AcademicYear            @relation(fields: [academic_year_id], references: [id], onDelete: Cascade)
+  recordedBy                User?                   @relation(fields: [recorded_by], references: [id])
+  school_fee_rate_details   school_fee_rate_details @relation(fields: [school_fee_rate_detail_id], references: [id], onDelete: Cascade)
+  student                   Student                 @relation(fields: [student_id], references: [id], onDelete: Cascade)
+
+  @@index([academic_year_id])
+  @@index([payment_date])
+  @@index([school_fee_rate_detail_id])
+  @@index([status])
+  @@index([student_id, academic_year_id])
+  @@index([student_id])
+}
+
+model Student {
+  id            String  @id
+  userId        String? @map("user_id")
+  studentNumber String  @unique @map("student_number") @db.VarChar(20)
+
+  // Personal information
+  firstName    String   @map("first_name") @db.VarChar(100)
+  lastName     String   @map("last_name") @db.VarChar(100)
+  dateOfBirth  DateTime @map("date_of_birth") @db.Date
+  placeOfBirth String?  @map("place_of_birth") @db.VarChar(100)
+  gender       String   @db.VarChar(10)
+  nationality  String?  @db.VarChar(50)
+
+  // Contact
+  phone     String? @db.VarChar(20)
+  email     String? @db.VarChar(255)
+  address   String? @db.Text
+  avatarUrl String? @map("avatar_url") @db.Text
+
+  // Medical information
+  bloodType    String? @map("blood_type") @db.VarChar(5)
+  allergies    String? @db.Text
+  medicalNotes String? @map("medical_notes") @db.Text
+
+  // Academic information
+  classId        String?       @map("class_id")
+  enrollmentDate DateTime      @map("enrollment_date") @db.Date
+  status         StudentStatus @default(ACTIVE)
+
+  // Documents
+  birthCertificateUrl     String? @map("birth_certificate_url") @db.Text
+  vaccinationCardUrl      String? @map("vaccination_card_url") @db.Text
+  previousSchoolReportUrl String? @map("previous_school_report_url") @db.Text
+
+  // State assignment & attachments
+  isStateAssigned Boolean  @default(false) @map("is_state_assigned")
+  attachments     String[] @default([]) @map("attachments")
+
+  // Compte de connexion : mot de passe généré affiché dans l'onglet « Compte ».
+  generatedPassword String? @map("generated_password") @db.VarChar(255)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  user                  User?                    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  class                 SchoolClass?             @relation(fields: [classId], references: [id], onDelete: SetNull)
+  attendances           attendances[]
+  attendanceSummaries   attendance_summaries[]
+  disciplinaryIncidents disciplinary_incidents[]
+  studentPayments       student_payments[]
+  studentParents        student_parents[]
+  customPaymentPlans    custom_payment_plans[]
+  inscriptions          inscriptions[]
+  grades                grades[]
+  student_absences      student_absences[]
+  attendanceRecords     attendance_records[]
+  conduct_grades        conduct_grades[]
+  conduct_overrides     conduct_absence_overrides[]
+
+  @@map("students")
+}
+
+model subjects {
+  id                  String                      @id
+  name                String                      @db.VarChar(100)
+  code                String                      @unique @db.VarChar(20)
+  coefficient         Int                         @default(1)
+  description         String?
+  created_at          DateTime                    @default(now())
+  class_subjects      class_subjects[]
+  schedules           schedules[]
+  timetables          class_timetables[]
+  teacher_assignments teacher_class_assignments[]
+  grades              grades[]
+  student_absences    student_absences[]
+  teacher_subjects    teacher_subjects[]
+  attendance_sessions attendance_sessions[]
+  evaluation_types    evaluation_types[]
+  conduct_overrides   conduct_absence_overrides[]
+}
+
+model User {
+  id           String    @id
+  email        String    @unique @db.VarChar(255)
+  passwordHash String    @map("password_hash") @db.VarChar(255)
+  role         UserRole
+  roleId       String?   @map("role_id")
+  firstName    String    @map("first_name") @db.VarChar(100)
+  lastName     String    @map("last_name") @db.VarChar(100)
+  phone        String?   @db.VarChar(20)
+  avatarUrl    String?   @map("avatar_url")
+  isActive     Boolean   @default(true) @map("is_active")
+  isProtected  Boolean   @default(false) @map("is_protected")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  customRole                   Role?                          @relation(fields: [roleId], references: [id])
+  refreshTokens               RefreshToken[]
+  students                    Student[]
+  parents                     parents[]
+  expensesApproved            expenses[]                    @relation("expenses_approved_byTousers")
+  expensesRecorded            expenses[]                    @relation("expenses_recorded_byTousers")
+  scheduleExceptions          schedule_exceptions[]
+  attendancesRecorded         attendances[]
+  conductGradesValidated      conduct_grades[]
+  auditLogs                   audit_logs[]
+  studentPaymentsRecorded     student_payments[]
+  customPaymentPlansCreated   custom_payment_plans[]        @relation("CustomPaymentPlanCreator")
+  budgetTransactionsCreated   budget_transactions[]         @relation("BudgetTransactionCreator")
+  teacher                     teachers?
+  payrollsValidated           monthly_payrolls[]            @relation("PayrollValidator")
+  payrollsCreated             monthly_payrolls[]            @relation("PayrollCreator")
+  payrollPaymentsCreated      payroll_payments[]            @relation("PayrollPaymentCreator")
+  advancePaymentsCreated      advance_payments[]            @relation("AdvancePaymentCreator")
+  advancePaymentsApproved      advance_payments[]            @relation("AdvancePaymentApprover")
+  payrollCorrectionsResponded payroll_correction_requests[] @relation("PayrollCorrectionResponder")
+  absencesCreated              teacher_absences[]            @relation("AbsenceCreator")
+  attendanceSessionsRecorded   attendance_sessions[]
+  attendanceMakeupsCreated     attendance_makeup_sessions[]
+  bulletinReleasesGenerated    bulletin_releases[]           @relation("BulletinReleaseGenerator")
+  moveRequestsCreated          attendance_move_requests[]    @relation("MoveRequestRequester")
+  moveRequestsDecided          attendance_move_requests[]    @relation("MoveRequestDecider")
+
+  @@map("users")
+}
+
+enum AcademicLevel {
+  SIXIEME
+  CINQUIEME
+  QUATRIEME
+  TROISIEME
+}
+
+enum BudgetType {
+  DEPENSES
+  REVENUS
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum ContractType {
+  CDI
+  CDD
+  VACATAIRE
+  BENEVOLAT
+}
+
+enum TeacherContractType {
+  CDI
+  CDD
+  VACATAIRE
+}
+
+enum DocumentType {
+  CONTRAT
+  DIPLOME
+  CV
+  PIECE_IDENTITE
+  ACTE_NAISSANCE
+  CARNET_VACCINATION
+  BULLETIN
+  RECU_PAIEMENT
+  FACTURE
+  AUTRE
+}
+
+enum ExpenseCategory {
+  SALAIRES
+  FOURNITURES
+  MAINTENANCE
+  TRANSPORT
+  ACTIVITES
+  ENERGIE
+  LOYER
+  ASSURANCES
+  AUTRE
+}
+
+enum ExpenseStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  PAID
+  REJECTED
+}
+
+enum FeeType {
+  INSCRIPTION
+  SCOLARITE_MENSUELLE
+  CANTINE
+  TRANSPORT
+  UNIFORME
+  ACTIVITE
+  AUTRE
+}
+
+enum IncidentSeverity {
+  MINEUR
+  MOYEN
+  GRAVE
+  TRES_GRAVE
+}
+
+enum Mention {
+  EXCELLENT
+  TRES_BIEN
+  BIEN
+  ASSEZ_BIEN
+  PASSABLE
+  INSUFFISANT
+}
+
+enum ParentRelation {
+  PERE
+  MERE
+  TUTEUR
+  AUTRE
+}
+
+enum PaymentMethod {
+  CASH
+  CHEQUE
+  VIREMENT
+  MOBILE_MONEY
+  CARTE
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum RevenueSource {
+  SCOLARITE
+  INSCRIPTION
+  CANTINE
+  TRANSPORT
+  SUBVENTION
+  DON
+  AUTRE
+}
+
+enum SalaryStatus {
+  DRAFT
+  APPROVED
+  PAID
+}
+
+enum SanctionType {
+  AVERTISSEMENT
+  BLAME
+  EXCLUSION_TEMPORAIRE
+  EXCLUSION_DEFINITIVE
+  CONVOCATION_PARENTS
+  TRAVAUX_INTERET_GENERAL
+}
+
+enum StaffFunction {
+  ENSEIGNANT
+  DIRECTEUR
+  SURVEILLANT
+  SECRETAIRE
+  COMPTABLE
+  MAINTENANCE
+}
+
+enum StudentStatus {
+  ACTIVE
+  INACTIVE
+  GRADUATED
+  TRANSFERRED
+  EXPELLED
+}
+
+enum TimePeriod {
+  MORNING
+  AFTERNOON
+}
+
+enum Trimester {
+  PREMIER
+  DEUXIEME
+  TROISIEME
+}
+
+enum UserRole {
+  ADMIN
+  TEACHER
+  ACCOUNTANT
+  STUDENT
+  PARENT
+}
+
+/// Rôle personnalisé du personnel, contrôlant uniquement les menus visibles
+/// dans le sidebar (pas les autorisations API, qui restent basées sur UserRole).
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique @db.VarChar(100)
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+  isProtected Boolean  @default(false) @map("is_protected")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  menus RoleMenu[]
+  users User[]
+
+  @@map("roles")
+}
+
+model RoleMenu {
+  id      String @id @default(uuid())
+  roleId  String @map("role_id")
+  menuKey String @map("menu_key") @db.VarChar(100)
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, menuKey])
+  @@map("role_menus")
+}
+
+model custom_payment_plans {
+  id                               String                             @id @default(uuid())
+  student_id                       String
+  class_id                         String
+  academic_year_id                 String
+  name                             String                             @db.VarChar(200)
+  description                      String?                            @db.Text
+  total_amount                     Decimal                            @db.Decimal(10, 2)
+  is_active                        Boolean                            @default(true)
+  created_at                       DateTime                           @default(now())
+  updated_at                       DateTime                           @default(now()) @updatedAt
+  created_by                       String?
+  academicYear                     AcademicYear                       @relation(fields: [academic_year_id], references: [id], onDelete: Cascade)
+  student                          Student                            @relation(fields: [student_id], references: [id], onDelete: Cascade)
+  class                            SchoolClass                        @relation(fields: [class_id], references: [id], onDelete: Cascade)
+  creator                          User?                              @relation("CustomPaymentPlanCreator", fields: [created_by], references: [id], onDelete: SetNull)
+  custom_payment_plan_installments custom_payment_plan_installments[]
+
+  @@unique([student_id, academic_year_id])
+  @@index([student_id])
+  @@index([class_id])
+  @@index([academic_year_id])
+  @@index([is_active])
+  @@map("custom_payment_plans")
+}
+
+model custom_payment_plan_installments {
+  id                     String               @id @default(uuid())
+  custom_payment_plan_id String
+  payment_type_id        String
+  installment_number     Int
+  due_date               DateTime             @db.Date
+  amount                 Decimal              @db.Decimal(10, 2)
+  is_paid                Boolean              @default(false)
+  paid_at                DateTime?
+  notes                  String?              @db.Text
+  created_at             DateTime             @default(now())
+  updated_at             DateTime             @default(now()) @updatedAt
+  custom_payment_plans   custom_payment_plans @relation(fields: [custom_payment_plan_id], references: [id], onDelete: Cascade)
+  payment_types          payment_types        @relation(fields: [payment_type_id], references: [id], onDelete: Cascade)
+
+  @@index([custom_payment_plan_id])
+  @@index([payment_type_id])
+  @@index([due_date])
+  @@index([is_paid])
+  @@map("custom_payment_plan_installments")
+}
+
+model teachers {
+  id                   String                      @id @default(uuid())
+  first_name           String                      @db.VarChar(100)
+  last_name            String                      @db.VarChar(100)
+  email                String                      @unique @db.VarChar(255)
+  phone                String                      @db.VarChar(20)
+  contract_type        TeacherContractType
+  hire_date            DateTime                    @db.Date
+  end_date             DateTime?                   @db.Date // Pour CDD uniquement
+  specialties          String                      @db.Text
+  qualifications       String                      @db.Text
+  attachments          String[]                    @default([])
+  generated_password   String?                     @map("generated_password") @db.VarChar(255)
+  odoo_partner_id      Int?
+  user_id              String?                     @unique @map("user_id") @db.VarChar(255)
+  created_at           DateTime                    @default(now())
+  updated_at           DateTime                    @default(now()) @updatedAt
+  timetables           class_timetables[]
+  class_assignments    teacher_class_assignments[]
+  grades               grades[]
+  evaluation_types     evaluation_types[]
+  student_absences     student_absences[]
+  main_teacher_classes class_main_teachers[]
+  user                 User?                       @relation(fields: [user_id], references: [id], onDelete: SetNull)
+  remuneration         teacher_remuneration?
+  allowances           teacher_allowances[]
+  monthly_payrolls     monthly_payrolls[]
+  advance_payments     advance_payments[]
+  hours                teacher_hours[]
+  absences             teacher_absences[]
+  subjects             teacher_subjects[]
+  attendance_sessions  attendance_sessions[]
+  eval_coefficients    teacher_evaluation_coefficients[]
+
+  @@index([email])
+  @@index([contract_type])
+  @@index([user_id])
+  @@map("teachers")
+}
+
+// Matières qu'un enseignant est habilité à enseigner (saisies sur sa fiche),
+// distinct de teacher_class_assignments qui lie enseignant/classe/matière/année
+// (dérivé de l'emploi du temps effectif).
+model teacher_subjects {
+  id         String   @id @default(uuid())
+  teacher_id String
+  subject_id String
+  created_at DateTime @default(now())
+
+  teacher teachers @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+  subject subjects @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+
+  @@unique([teacher_id, subject_id])
+  @@index([teacher_id])
+  @@index([subject_id])
+  @@map("teacher_subjects")
+}
+
+model teacher_class_assignments {
+  id               String   @id @default(uuid())
+  teacher_id       String
+  class_id         String
+  subject_id       String
+  academic_year_id String
+  created_at       DateTime @default(now())
+  updated_at       DateTime @default(now()) @updatedAt
+
+  teacher       teachers     @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+  class         SchoolClass  @relation(fields: [class_id], references: [id], onDelete: Cascade)
+  subject       subjects     @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  academic_year AcademicYear @relation(fields: [academic_year_id], references: [id], onDelete: Cascade)
+
+  @@unique([teacher_id, class_id, subject_id, academic_year_id])
+  @@index([teacher_id])
+  @@index([class_id])
+  @@index([subject_id])
+  @@index([academic_year_id])
+  @@map("teacher_class_assignments")
+}
+
+model class_main_teachers {
+  id               String   @id @default(uuid())
+  academic_year_id String
+  teacher_id       String
+  class_id         String
+  created_at       DateTime @default(now())
+  updated_at       DateTime @default(now()) @updatedAt
+
+  academicYear AcademicYear @relation(fields: [academic_year_id], references: [id], onDelete: Cascade)
+  teacher      teachers     @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+  class        SchoolClass  @relation(fields: [class_id], references: [id], onDelete: Cascade)
+
+  @@unique([teacher_id, academic_year_id]) // Un enseignant ne peut être professeur principal que d'une seule classe par année
+  @@unique([class_id, academic_year_id]) // Une classe ne peut avoir qu'un seul professeur principal par année
+  @@index([academic_year_id])
+  @@index([teacher_id])
+  @@index([class_id])
+  @@map("class_main_teachers")
+}
+
+model classrooms {
+  id         String             @id @default(uuid())
+  name       String             @unique @db.VarChar(100)
+  created_at DateTime           @default(now())
+  updated_at DateTime           @default(now()) @updatedAt
+  timetables class_timetables[]
+
+  @@index([name])
+  @@map("classrooms")
+}
+
+/// Créneaux horaires réutilisables (§ Emploi du temps) — liste gérée par
+/// l'utilisateur (« + » dans le formulaire d'ajout de créneau), indépendante
+/// des lignes class_timetables (qui stockent leurs propres start_time/end_time).
+model horaires {
+  id         String   @id @default(uuid())
+  start_time String   @db.VarChar(10)
+  end_time   String   @db.VarChar(10)
+  // Type de créneau : COURS (par défaut), RECREATION (récréation) ou
+  // PAUSE (pause / après-midi). Les créneaux non-COURS s'affichent en bande
+  // pleine largeur dans la grille et le PDF, sans matière ni enseignant.
+  type       String   @default("COURS") @db.VarChar(20)
+  created_at DateTime @default(now())
+
+  @@unique([start_time, end_time])
+  @@map("horaires")
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+}
+
+model class_timetables {
+  id               String       @id @default(uuid())
+  academic_year_id String
+  class_id         String
+  day_of_week      DayOfWeek
+  start_time       String       @db.VarChar(10)
+  end_time         String       @db.VarChar(10)
+  subject_id       String
+  teacher_id       String
+  classroom_id     String
+  created_at       DateTime     @default(now())
+  updated_at       DateTime     @default(now()) @updatedAt
+  academicYear     AcademicYear @relation(fields: [academic_year_id], references: [id], onDelete: Cascade)
+  class            SchoolClass  @relation(fields: [class_id], references: [id], onDelete: Cascade)
+  subject          subjects     @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  teacher          teachers     @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+  classroom        classrooms   @relation(fields: [classroom_id], references: [id], onDelete: Cascade)
+  makeups          attendance_makeup_sessions[]
+  moveRequests     attendance_move_requests[]
+
+  @@unique([academic_year_id, class_id, day_of_week, start_time])
+  @@index([academic_year_id])
+  @@index([class_id])
+  @@index([day_of_week])
+  @@map("class_timetables")
+}
+
+model semesters {
+  id               String             @id @default(uuid())
+  name             String             @db.VarChar(100)
+  start_date       DateTime           @db.Date
+  end_date         DateTime           @db.Date
+  academic_year_id String
+  /// Poids du trimestre dans la moyenne générale annuelle. Par convention les
+  /// deux derniers trimestres comptent double (1er = 1, 2e et 3e = 2), d'où une
+  /// MGA sur 5 coefficients : (T1 + 2×T2 + 2×T3) / 5.
+  coefficient      Int                @default(1)
+  created_at       DateTime           @default(now())
+  updated_at       DateTime           @default(now()) @updatedAt
+  academicYear      AcademicYear                @relation(fields: [academic_year_id], references: [id], onDelete: Cascade)
+  grades            grades[]
+  student_absences  student_absences[]
+  conduct_grades    conduct_grades[]
+  conduct_overrides conduct_absence_overrides[]
+  bulletin_releases bulletin_releases[]
+
+  @@index([academic_year_id])
+  @@index([start_date])
+  @@index([end_date])
+  @@map("semesters")
+}
+
+model evaluation_types {
+  id               String        @id @default(uuid())
+  name             String        @db.VarChar(200)
+  teacher_id       String
+  academic_year_id String?
+  class_id         String?
+  subject_id       String?
+  coefficient      Int?          @default(1)
+  number           Int?
+  max_note         Int           @default(20)
+  created_at       DateTime      @default(now())
+  updated_at       DateTime      @default(now()) @updatedAt
+  teacher          teachers      @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+  academicYear     AcademicYear? @relation(fields: [academic_year_id], references: [id], onDelete: Cascade)
+  class            SchoolClass?  @relation(fields: [class_id], references: [id], onDelete: Cascade)
+  subject          subjects?     @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  grades           grades[]
+
+  @@index([teacher_id])
+  @@index([academic_year_id])
+  @@index([class_id])
+  @@index([subject_id])
+  @@map("evaluation_types")
+}
+
+// Coefficients d'évaluation personnalisés créés par un enseignant (bouton « + »
+// du champ Coefficient). Les deux coefficients par défaut (1 et 2) restent
+// applicatifs et ne figurent PAS dans cette table : ils sont toujours proposés.
+model teacher_evaluation_coefficients {
+  id         String   @id @default(uuid())
+  teacher_id String
+  value      Int
+  label      String?  @db.VarChar(60)
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+  teacher    teachers @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+
+  @@unique([teacher_id, value])
+  @@index([teacher_id])
+  @@map("teacher_evaluation_coefficients")
+}
+
+model grades {
+  id                 String           @id @default(uuid())
+  academic_year_id   String
+  teacher_id         String
+  subject_id         String
+  semester_id        String
+  student_id         String
+  class_id           String
+  evaluation_type_id String
+  note               Decimal          @db.Decimal(5, 2)
+  max_note           Int              @default(20)
+  created_at         DateTime         @default(now())
+  updated_at         DateTime         @default(now()) @updatedAt
+  academicYear       AcademicYear     @relation(fields: [academic_year_id], references: [id], onDelete: Cascade)
+  teacher            teachers         @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+  subject            subjects         @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  semester           semesters        @relation(fields: [semester_id], references: [id], onDelete: Cascade)
+  student            Student          @relation(fields: [student_id], references: [id], onDelete: Cascade)
+  class              SchoolClass      @relation(fields: [class_id], references: [id], onDelete: Cascade)
+  evaluationType     evaluation_types @relation(fields: [evaluation_type_id], references: [id], onDelete: Cascade)
+
+  @@index([academic_year_id])
+  @@index([teacher_id])
+  @@index([subject_id])
+  @@index([semester_id])
+  @@index([student_id])
+  @@index([class_id])
+  @@index([evaluation_type_id])
+  @@index([academic_year_id, teacher_id, subject_id, semester_id])
+  @@map("grades")
+}
+
+model student_absences {
+  id               String   @id @default(uuid())
+  academic_year_id String
+  student_id       String
+  class_id         String
+  semester_id      String
+  subject_id       String
+  teacher_id       String
+  hours_absent     Decimal  @db.Decimal(3, 1) // Nombre d'heures d'absence (peut être 0.5, 1, 1.5, 2, etc.)
+  date             DateTime @db.Date
+  created_at       DateTime @default(now())
+  updated_at       DateTime @default(now()) @updatedAt
+
+  academicYear AcademicYear @relation(fields: [academic_year_id], references: [id], onDelete: Cascade)
+  student      Student      @relation(fields: [student_id], references: [id], onDelete: Cascade)
+  class        SchoolClass  @relation(fields: [class_id], references: [id], onDelete: Cascade)
+  semester     semesters    @relation(fields: [semester_id], references: [id], onDelete: Cascade)
+  subject      subjects     @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  teacher      teachers     @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+
+  @@index([academic_year_id])
+  @@index([student_id])
+  @@index([class_id])
+  @@index([semester_id])
+  @@index([subject_id])
+  @@index([teacher_id])
+  @@index([date])
+  @@index([academic_year_id, teacher_id, subject_id, date])
+  @@map("student_absences")
+}
+
+// ============================================
+// CONDUITE (note de comportement)
+// ============================================
+
+// Paramètres du calcul de la conduite, par année scolaire.
+// base_note = note de départ (16/20) ; hours_per_point = nombre d'heures de cours
+// manquées qui coûte 1 point (2) ; period_minutes = durée d'un créneau de l'emploi
+// du temps (50 min = 1 heure de cours) ; default_session_hours = heures retenues
+// pour une séance sans horaire ; coefficient = poids dans la moyenne générale.
+model conduct_settings {
+  id                    String   @id @default(uuid())
+  academic_year_id      String   @unique
+  base_note             Decimal  @default(20) @db.Decimal(5, 2)
+  hours_per_point       Decimal  @default(2) @db.Decimal(4, 1)
+  default_session_hours Decimal  @default(1) @db.Decimal(4, 1)
+  period_minutes        Int      @default(50)
+  coefficient           Int      @default(1)
+  created_at            DateTime @default(now())
+  updated_at            DateTime @default(now()) @updatedAt
+
+  academicYear AcademicYear @relation(fields: [academic_year_id], references: [id], onDelete: Cascade)
+
+  @@map("conduct_settings")
+}
+
+// Note de conduite d'un élève pour un trimestre.
+// `computed_note` = calcul système ; `manual_note` = correction admin (prioritaire) ;
+// `final_note` = manual_note ?? computed_note (matérialisée pour la lecture).
+model conduct_grades {
+  id               String    @id @default(uuid())
+  academic_year_id String
+  semester_id      String
+  class_id         String
+  student_id       String
+  base_note        Decimal   @default(20) @db.Decimal(5, 2)
+  absence_hours    Decimal   @default(0) @db.Decimal(6, 1)
+  penalty          Decimal   @default(0) @db.Decimal(5, 2)
+  computed_note    Decimal   @default(20) @db.Decimal(5, 2)
+  manual_note      Decimal?  @db.Decimal(5, 2)
+  final_note       Decimal   @default(20) @db.Decimal(5, 2)
+  comment          String?
+  is_validated     Boolean   @default(false)
+  computed_at      DateTime?
+  validated_at     DateTime?
+  validated_by     String?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @default(now()) @updatedAt
+
+  academicYear AcademicYear @relation(fields: [academic_year_id], references: [id], onDelete: Cascade)
+  semester     semesters    @relation(fields: [semester_id], references: [id], onDelete: Cascade)
+  class        SchoolClass  @relation(fields: [class_id], references: [id], onDelete: Cascade)
+  student      Student      @relation(fields: [student_id], references: [id], onDelete: Cascade)
+  validatedBy  User?        @relation(fields: [validated_by], references: [id], onDelete: SetNull)
+
+  @@unique([academic_year_id, semester_id, class_id, student_id], map: "conduct_grades_year_semester_class_student_key")
+  @@index([academic_year_id])
+  @@index([semester_id])
+  @@index([class_id])
+  @@index([student_id])
+  @@map("conduct_grades")
+}
+
+// Correction manuelle des heures d'absence retenues pour une matière
+// (justification a posteriori). Remplace le total calculé pour cette matière.
+model conduct_absence_overrides {
+  id               String   @id @default(uuid())
+  academic_year_id String
+  semester_id      String
+  class_id         String
+  student_id       String
+  subject_id       String
+  hours            Decimal  @default(0) @db.Decimal(5, 1)
+  reason           String?
+  // Justificatif (PDF/image) fourni par l'admin pour appuyer la correction d'heures.
+  justificatif_url      String?
+  justificatif_filename String?
+  created_at       DateTime @default(now())
+  updated_at       DateTime @default(now()) @updatedAt
+
+  academicYear AcademicYear @relation(fields: [academic_year_id], references: [id], onDelete: Cascade)
+  semester     semesters    @relation(fields: [semester_id], references: [id], onDelete: Cascade)
+  class        SchoolClass  @relation(fields: [class_id], references: [id], onDelete: Cascade)
+  student      Student      @relation(fields: [student_id], references: [id], onDelete: Cascade)
+  subject      subjects     @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+
+  @@unique([academic_year_id, semester_id, student_id, subject_id], map: "conduct_absence_overrides_year_semester_student_subject_key")
+  @@index([class_id])
+  @@index([student_id])
+  @@map("conduct_absence_overrides")
+}
+
+/// Publication des bulletins d'une classe pour un trimestre.
+///
+/// Le bulletin reste calculé à la volée à partir des notes ; cette table ne
+/// stocke pas le document mais l'acte administratif de génération. Elle porte
+/// deux règles métier : tant qu'aucune ligne n'existe pour (classe, trimestre,
+/// année), les espaces Parent et Élève ne voient pas le bulletin ; et
+/// `generated_at` — et non la date du jour — est la date imprimée sur le PDF.
+model bulletin_releases {
+  id               String   @id @default(uuid())
+  academic_year_id String
+  semester_id      String
+  class_id         String
+  generated_at     DateTime @default(now())
+  generated_by     String?
+  created_at       DateTime @default(now())
+  updated_at       DateTime @default(now()) @updatedAt
+
+  academicYear AcademicYear @relation(fields: [academic_year_id], references: [id], onDelete: Cascade)
+  semester     semesters    @relation(fields: [semester_id], references: [id], onDelete: Cascade)
+  class        SchoolClass  @relation(fields: [class_id], references: [id], onDelete: Cascade)
+  generatedBy  User?        @relation("BulletinReleaseGenerator", fields: [generated_by], references: [id], onDelete: SetNull)
+
+  @@unique([academic_year_id, semester_id, class_id], map: "bulletin_releases_year_semester_class_key")
+  @@index([class_id])
+  @@index([semester_id])
+  @@map("bulletin_releases")
+}
+
+// ============================================
+// PAYROLL MODELS
+// ============================================
+
+enum RemunerationMode {
+  HORAIRE
+  FORFAIT_MENSUEL
+}
+
+enum AllowanceType {
+  MONTANT_FIXE
+  POURCENTAGE_DU_BRUT
+}
+
+enum AllowanceCategory {
+  INDEMNITE
+  PRIME
+  AVANTAGE
+  AVANTAGE_EN_NATURE
+}
+
+enum PayrollStatus {
+  DRAFT
+  VALIDATED
+  PAID
+  CANCELLED
+}
+
+enum SeniorityRuleType {
+  POURCENTAGE_PAR_ANNEE
+  MONTANT_PAR_PALIER
+}
+
+enum ProrataRule {
+  JOURS_CIVILS
+  JOURS_OUVRES
+}
+
+enum ProrataBasis {
+  CALENDAR_DAYS
+  WORKING_DAYS
+  HOURS
+}
+
+enum DaysInMonthMethod {
+  ACTUAL
+  FIXED_30
+}
+
+enum RoundingRule {
+  ROUND_NEAREST
+  ROUND_UP
+}
+
+enum RepaymentMethod {
+  SINGLE_MONTH
+  INSTALLMENTS
+}
+
+// Paramètres de rémunération par enseignant
+model teacher_remuneration {
+  id                  String           @id @default(uuid())
+  teacher_id          String           @unique
+  mode_remuneration   RemunerationMode
+  taux_horaire        Decimal?         @db.Decimal(10, 2) // Si HORAIRE
+  heures_hebdo        Int? // Si HORAIRE
+  forfait_mensuel     Decimal?         @db.Decimal(10, 2) // Si FORFAIT_MENSUEL
+  periode_facturation String           @default("MENSUELLE") @db.VarChar(50)
+  cnps_applicable     Boolean          @default(true)
+  compte_bancaire     String?          @db.VarChar(255)
+  mode_paiement       String?          @db.VarChar(50)
+  created_at          DateTime         @default(now())
+  updated_at          DateTime         @default(now()) @updatedAt
+  teacher             teachers         @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+
+  @@map("teacher_remuneration")
+}
+
+// Primes et indemnités
+model teacher_allowances {
+  id             String            @id @default(uuid())
+  teacher_id     String
+  title          String            @db.VarChar(200)
+  amount         Decimal           @db.Decimal(10, 2)
+  type_montant   AllowanceType
+  is_recurring   Boolean           @default(false)
+  is_taxable     Boolean           @default(true)
+  category       AllowanceCategory
+  effective_from DateTime          @db.Date
+  effective_to   DateTime?         @db.Date
+  notes          String?           @db.Text
+  condition      String?           @db.Text
+  created_at     DateTime          @default(now())
+  updated_at     DateTime          @default(now()) @updatedAt
+  teacher        teachers          @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+
+  @@index([teacher_id])
+  @@index([is_recurring])
+  @@index([effective_from, effective_to])
+  @@map("teacher_allowances")
+}
+
+// Paramètres globaux de paie
+model payroll_settings {
+  id                       String            @id @default(uuid())
+  date_calcul_mensuel      Int               @default(25) // Jour du mois pour génération auto
+  nombre_semaines_par_mois Decimal           @default(4.33) @db.Decimal(4, 2)
+  seniority_rule_type      SeniorityRuleType @default(MONTANT_PAR_PALIER)
+  seniority_rule_value     Decimal?          @db.Decimal(5, 2) // % par année ou montant (pour ancien système)
+  seniority_rule_max       Decimal?          @db.Decimal(5, 2) // % max ou null (pour ancien système)
+  seniority_bareme         Json?             // Barème par paliers: [{minYears: 0, maxYears: 2, percentage: 0}, ...]
+  
+  // Prorata configuration
+  prorata_enabled          Boolean           @default(true)
+  prorata_basis            ProrataBasis      @default(CALENDAR_DAYS)
+  prorata_days_in_month_method DaysInMonthMethod @default(ACTUAL)
+  prorata_rounding         RoundingRule      @default(ROUND_NEAREST)
+  prorata_include_primes   Boolean           @default(true)
+  prorata_apply_to         Json?             // Liste des éléments affectés: ["base_salary","housing","transport",...]
+  
+  // Acomptes configuration
+  acompte_enabled          Boolean           @default(true)
+  acompte_max_pct_per_month Decimal?        @db.Decimal(5, 2) // % max du salaire brut (ex: 40%)
+  acompte_max_amount_per_request Decimal?  @db.Decimal(10, 2) // Plafond absolu par demande (FCFA)
+  acompte_max_requests_per_month Int?       @default(2) // Nombre max de demandes par mois
+  acompte_requires_admin_approval Boolean   @default(true)
+  acompte_auto_apply_to_payroll Boolean      @default(true)
+  acompte_allow_multiple_types Boolean       @default(true)
+  acompte_rounding         RoundingRule?     @default(ROUND_NEAREST)
+  acompte_repayment_method RepaymentMethod?  @default(SINGLE_MONTH)
+  acompte_plafond_percent  Decimal?          @db.Decimal(5, 2) // Ancien champ, conservé pour compatibilité
+  
+  assiette_imposable       String            @default("BRUT_MOINS_COTISATIONS") @db.VarChar(100)
+  calcul_igr_actif         Boolean           @default(false)
+  calcul_cnps_actif        Boolean           @default(true)
+  taux_cnps_salarie        Decimal?          @db.Decimal(5, 2)
+  taux_cnps_employeur      Decimal?          @db.Decimal(5, 2)
+  bareme_imposition        Json?             // Tableau de tranches IGR
+  created_at               DateTime          @default(now())
+  updated_at               DateTime          @default(now()) @updatedAt
+
+  @@map("payroll_settings")
+}
+
+// Heures effectuées par les vacataires (par mois)
+model teacher_hours {
+  id           String   @id @default(uuid())
+  teacher_id  String
+  month        Int
+  year         Int
+  hours_worked Decimal  @db.Decimal(5, 2)
+  subject      String?  @db.VarChar(200)
+  notes        String?  @db.Text
+  created_at   DateTime @default(now())
+  updated_at   DateTime @default(now()) @updatedAt
+  teacher      teachers @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+
+  @@unique([teacher_id, month, year])
+  @@index([teacher_id])
+  @@index([month, year])
+  @@map("teacher_hours")
+}
+
+// Absences des enseignants
+model teacher_absences {
+  id              String   @id @default(uuid())
+  teacher_id      String
+  date            DateTime @db.Date
+  hours_absent    Decimal  @db.Decimal(5, 2) // Nombre d'heures d'absence (ex: 2, 4, 8)
+  is_justified    Boolean  @default(false) // Absence justifiée ou non
+  reason          String?  @db.VarChar(200) // Motif de l'absence
+  notes           String?  @db.Text // Notes supplémentaires
+  created_by      String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @default(now()) @updatedAt
+  teacher         teachers @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+  createdBy       User?    @relation("AbsenceCreator", fields: [created_by], references: [id], onDelete: SetNull)
+
+  @@index([teacher_id])
+  @@index([date])
+  @@index([teacher_id, date])
+  @@map("teacher_absences")
+}
+
+// Paies mensuelles
+model monthly_payrolls {
+  id                  String                        @id @default(uuid())
+  teacher_id          String
+  month               Int
+  year                Int
+  status              PayrollStatus                 @default(DRAFT)
+  base_salary         Decimal                       @db.Decimal(10, 2)
+  total_allowances    Decimal                       @default(0) @db.Decimal(10, 2)
+  seniority_bonus     Decimal                       @default(0) @db.Decimal(10, 2)
+  total_brut          Decimal                       @db.Decimal(10, 2)
+  deductions          Decimal                       @default(0) @db.Decimal(10, 2)
+  net_payable         Decimal                       @db.Decimal(10, 2)
+  hours_worked        Decimal?                      @db.Decimal(5, 2) // Pour horaire
+  absences_deduction  Decimal                       @default(0) @db.Decimal(10, 2)
+  advances_deduction  Decimal                       @default(0) @db.Decimal(10, 2)
+  prorata_amount      Decimal?                      @db.Decimal(10, 2) // Montant du prorata
+  prorata_days        Int?                          // Jours travaillés
+  prorata_total_days  Int?                          // Jours totaux du mois
+  cnps_salarie        Decimal?                      @db.Decimal(10, 2)
+  cnps_employeur      Decimal?                      @db.Decimal(10, 2)
+  igr                 Decimal?                      @db.Decimal(10, 2)
+  validated_by        String?
+  validated_at        DateTime?
+  created_by          String?
+  created_at          DateTime                      @default(now())
+  updated_at          DateTime                      @default(now()) @updatedAt
+  teacher             teachers                      @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+  validatedBy         User?                         @relation("PayrollValidator", fields: [validated_by], references: [id], onDelete: SetNull)
+  createdBy           User?                         @relation("PayrollCreator", fields: [created_by], references: [id], onDelete: SetNull)
+  items               payroll_items[]
+  payments            payroll_payments[]
+  correction_requests payroll_correction_requests[]
+
+  @@unique([teacher_id, month, year])
+  @@index([teacher_id])
+  @@index([month, year])
+  @@index([status])
+  @@map("monthly_payrolls")
+}
+
+// Lignes de détail de paie
+model payroll_items {
+  id              String           @id @default(uuid())
+  payroll_id      String
+  item_type       String           @db.VarChar(50) // BASE, ALLOWANCE, SENIORITY, DEDUCTION, ABSENCE, ADVANCE
+  item_label      String           @db.VarChar(200)
+  amount          Decimal          @db.Decimal(10, 2)
+  allowance_id    String? // Si c'est une prime/indemnité
+  is_taxable      Boolean          @default(true)
+  notes           String?          @db.Text
+  created_at      DateTime         @default(now())
+  monthly_payroll monthly_payrolls @relation(fields: [payroll_id], references: [id], onDelete: Cascade)
+
+  @@index([payroll_id])
+  @@index([item_type])
+  @@map("payroll_items")
+}
+
+// Paiements effectués
+model payroll_payments {
+  id              String           @id @default(uuid())
+  payroll_id      String
+  amount          Decimal          @db.Decimal(10, 2)
+  payment_date    DateTime         @db.Date
+  payment_method  PaymentMethod
+  reference       String?          @db.VarChar(100)
+  notes           String?          @db.Text
+  created_by      String?
+  created_at      DateTime         @default(now())
+  monthly_payroll monthly_payrolls @relation(fields: [payroll_id], references: [id], onDelete: Cascade)
+  createdBy       User?            @relation("PayrollPaymentCreator", fields: [created_by], references: [id], onDelete: SetNull)
+
+  @@index([payroll_id])
+  @@index([payment_date])
+  @@map("payroll_payments")
+}
+
+// Acomptes versés
+model advance_payments {
+  id                     String        @id @default(uuid())
+  teacher_id             String
+  amount                 Decimal       @db.Decimal(10, 2)
+  payment_date           DateTime      @db.Date
+  payment_method         PaymentMethod
+  reference              String?       @db.VarChar(100)
+  notes                  String?       @db.Text
+  status                 String        @default("PENDING") @db.VarChar(50) // PENDING, APPROVED, REJECTED
+  approved_by            String?
+  approved_at            DateTime?
+  repayment_method       RepaymentMethod @default(SINGLE_MONTH)
+  installments_count    Int?          @default(1) // Nombre d'échéances si installments
+  deducted               Boolean       @default(false) // Si déjà déduit d'une paie
+  deducted_in_payroll_id String? // ID de la paie où déduit
+  created_by             String?
+  created_at             DateTime      @default(now())
+  updated_at             DateTime      @default(now()) @updatedAt
+  teacher                teachers      @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+  createdBy              User?         @relation("AdvancePaymentCreator", fields: [created_by], references: [id], onDelete: SetNull)
+  approvedBy             User?         @relation("AdvancePaymentApprover", fields: [approved_by], references: [id], onDelete: SetNull)
+
+  @@index([teacher_id])
+  @@index([payment_date])
+  @@index([deducted])
+  @@index([status])
+  @@map("advance_payments")
+}
+
+// Demandes de correction de paie (enseignant → admin)
+model payroll_correction_requests {
+  id              String           @id @default(uuid())
+  payroll_id      String
+  teacher_id      String
+  reason          String           @db.Text
+  status          String           @default("PENDING") @db.VarChar(50) // PENDING, APPROVED, REJECTED
+  response        String?          @db.Text
+  responded_by    String?
+  responded_at    DateTime?
+  created_at      DateTime         @default(now())
+  updated_at      DateTime         @default(now()) @updatedAt
+  monthly_payroll monthly_payrolls @relation(fields: [payroll_id], references: [id], onDelete: Cascade)
+  respondedBy     User?            @relation("PayrollCorrectionResponder", fields: [responded_by], references: [id], onDelete: SetNull)
+
+  @@index([payroll_id])
+  @@index([teacher_id])
+  @@index([status])
+  @@map("payroll_correction_requests")
+}

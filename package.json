@@ -1,0 +1,40 @@
+{
+  "name": "school-management",
+  "version": "1.0.0",
+  "description": "Système de gestion scolaire - Collège Privé LE SOUVERAIN DE LARABIA",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter api dev\" \"pnpm --filter web dev\"",
+    "build": "pnpm --filter types build && pnpm --filter config build && pnpm --filter database build && pnpm --filter api build && pnpm --filter web build",
+    "clean": "pnpm --recursive clean && rm -rf node_modules",
+    "db:generate": "pnpm --filter database generate",
+    "db:migrate": "pnpm --filter database migrate",
+    "db:migrate:deploy": "pnpm --filter database migrate:deploy",
+    "db:apply-payroll": "pnpm --filter database run apply-payroll-migration",
+    "db:seed": "pnpm --filter database seed",
+    "db:studio": "pnpm --filter database studio",
+    "db:convert-inscriptions": "pnpm --filter database convert-inscriptions",
+    "lint": "pnpm --recursive lint",
+    "lint:fix": "pnpm --recursive lint:fix",
+    "format": "prettier --write .",
+    "type-check": "pnpm --recursive type-check",
+    "test": "pnpm --recursive test"
+  },
+  "dependencies": {
+    "@types/node": "^20.10.5"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "prettier": "^3.1.1",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.0"
+}

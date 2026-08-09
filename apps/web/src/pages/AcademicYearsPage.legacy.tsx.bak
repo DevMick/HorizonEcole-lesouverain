@@ -1,0 +1,668 @@
+import { useState } from 'react';
+import {
+  Button,
+  Modal,
+  Form,
+  Input,
+  InputNumber,
+  Select,
+  Space,
+  message,
+  Row,
+  Col,
+  Skeleton,
+  Alert,
+  DatePicker,
+} from 'antd';
+import { AlertTriangle, Calendar, CheckCircle2, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '../lib/api';
+import { PageHeader } from '../components/ui/page-header';
+import { GlassCard } from '../components/ui/glass-card';
+import { EmptyState } from '../components/ui/empty-state';
+import { PaginationBar } from '../components/pedagogy/PaginationBar';
+import { AcademicYearCard } from '../components/academic/AcademicYearCard';
+import dayjs from 'dayjs';
+
+export default function AcademicYearsPage() {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [searchText, setSearchText] = useState<string>('');
+  const [pagination, setPagination] = useState({
+    current: 1,
+    pageSize: 12,
+  });
+  const [form] = Form.useForm();
+  const queryClient = useQueryClient();
+  const [isSemesterModalOpen, setIsSemesterModalOpen] = useState(false);
+  const [editingSemester, setEditingSemester] = useState<any>(null);
+  const [semesterForm] = Form.useForm();
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsYearId, setDetailsYearId] = useState<string>('');
+
+  // Fetch academic years
+  const { data: yearsData, isLoading, error } = useQuery({
+    queryKey: ['academic-years'],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/academic-years');
+        console.log('Academic years API response:', response.data);
+        
+        // Vérifier la structure de la réponse
+        if (response.data && response.data.success && response.data.data) {
+          return response.data.data;
+        } else if (response.data && Array.isArray(response.data)) {
+          // Si la réponse est directement un tableau
+          return response.data;
+        } else if (response.data && response.data.data) {
+          // Si la réponse a une propriété data
+          return response.data.data;
+        }
+        
+        console.warn('Unexpected response structure:', response.data);
+        return [];
+      } catch (error: any) {
+        console.error('Error fetching academic years:', error);
+        message.error(error.response?.data?.error || 'Erreur lors du chargement des années académiques');
+        throw error;
+      }
+    },
+  });
+
+  // Fetch semesters (trimestres)
+  const {
+    data: semestersData,
+    isLoading: semestersLoading,
+  } = useQuery({
+    queryKey: ['semesters'],
+    queryFn: async () => {
+      const response = await api.get('/semesters');
+      return response.data.data || [];
+    },
+  });
+
+  // Filter years based on search
+  const filteredYears = yearsData
+    ? yearsData.filter((year: any) => {
+        if (!searchText) return true;
+        const search = searchText.toLowerCase();
+        return year.name?.toLowerCase().includes(search);
+      })
+    : [];
+
+  const currentYear = filteredYears.find((y: any) => y?.isCurrent) || yearsData?.find?.((y: any) => y?.isCurrent);
+  const activeYearId = yearsData?.find?.((y: any) => y?.isCurrent)?.id || '';
+
+  // Create mutation
+  const createMutation = useMutation({
+    mutationFn: async (values: any) => {
+      const response = await api.post('/academic-years', values);
+      return response.data;
+    },
+    onSuccess: async (responseData) => {
+      message.success('Année scolaire créée avec succès !');
+      handleCancel();
+      
+      // Option 1: Ajouter la nouvelle année directement au cache
+      if (responseData?.data) {
+        queryClient.setQueryData(['academic-years'], (oldData: any) => {
+          if (!oldData) return [responseData.data];
+          return [...oldData, responseData.data];
+        });
+      }
+      
+      // Option 2: Invalider et refetch pour s'assurer d'avoir les dernières données
+      await queryClient.invalidateQueries({ queryKey: ['academic-years'] });
+      queryClient.refetchQueries({ queryKey: ['academic-years'] });
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.error || 'Erreur lors de la création');
+    },
+  });
+
+  // Set current mutation
+  const setCurrentMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await api.post(`/academic-years/${id}/set-current`);
+      return response.data;
+    },
+    onSuccess: () => {
+      message.success('Année scolaire définie comme en cours !');
+      queryClient.invalidateQueries({ queryKey: ['academic-years'] });
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.error || 'Erreur lors de la définition');
+    },
+  });
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await api.delete(`/academic-years/${id}`);
+      return response.data;
+    },
+    onSuccess: () => {
+      message.success('Année scolaire supprimée !');
+      queryClient.invalidateQueries({ queryKey: ['academic-years'] });
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.error || 'Erreur lors de la suppression');
+    },
+  });
+
+  const handleCancel = () => {
+    setIsModalOpen(false);
+    form.resetFields();
+  };
+
+  const handleSubmit = async () => {
+    try {
+      const values = await form.validateFields();
+
+      // Générer le nom automatiquement si pas encore défini
+      let name = values.name;
+      if (!name && values.startYear && values.endYear) {
+        name = `${values.startYear}-${values.endYear}`;
+      }
+
+      // Assurer que les années sont des nombres
+      const data = {
+        name: name || `${values.startYear}-${values.endYear}`,
+        startYear: typeof values.startYear === 'number' ? values.startYear : parseInt(values.startYear, 10),
+        endYear: typeof values.endYear === 'number' ? values.endYear : parseInt(values.endYear, 10),
+      };
+
+      // Vérifier que les conversions ont réussi
+      if (isNaN(data.startYear) || isNaN(data.endYear)) {
+        message.error('Les années doivent être des nombres valides');
+        return;
+      }
+
+      createMutation.mutate(data);
+    } catch (error) {
+      console.error('Validation error:', error);
+    }
+  };
+
+  const filteredSemestersForDetails =
+    (semestersData || []).filter((semester: any) => semester.academic_year_id === detailsYearId) || [];
+
+  const createSemesterMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const response = await api.post('/semesters', {
+        name: data.name,
+        startDate: data.startDate.format('YYYY-MM-DD'),
+        endDate: data.endDate.format('YYYY-MM-DD'),
+        academicYearId: data.academicYearId,
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      message.success('Trimestre créé avec succès');
+      queryClient.invalidateQueries({ queryKey: ['semesters'] });
+      handleCloseSemesterModal();
+    },
+    onError: (error: any) => {
+      const errorMessage = error.response?.data?.error || 'Erreur lors de la création du trimestre';
+      message.error(errorMessage);
+    },
+  });
+
+  const updateSemesterMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const response = await api.patch(`/semesters/${id}`, {
+        name: data.name,
+        startDate: data.startDate.format('YYYY-MM-DD'),
+        endDate: data.endDate.format('YYYY-MM-DD'),
+        academicYearId: data.academicYearId,
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      message.success('Trimestre modifié avec succès');
+      queryClient.invalidateQueries({ queryKey: ['semesters'] });
+      handleCloseSemesterModal();
+    },
+    onError: (error: any) => {
+      const errorMessage = error.response?.data?.error || 'Erreur lors de la modification du trimestre';
+      message.error(errorMessage);
+    },
+  });
+
+  const deleteSemesterMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await api.delete(`/semesters/${id}`);
+      return response.data;
+    },
+    onSuccess: () => {
+      message.success('Trimestre supprimé avec succès');
+      queryClient.invalidateQueries({ queryKey: ['semesters'] });
+    },
+    onError: (error: any) => {
+      const errorMessage = error.response?.data?.error || 'Erreur lors de la suppression du trimestre';
+      message.error(errorMessage);
+    },
+  });
+
+  const handleOpenSemesterModal = (opts: { yearId: string; semester?: any }) => {
+    const yearId = opts.yearId;
+    const semester = opts.semester;
+    if (!yearId) {
+      message.error('Veuillez choisir une année scolaire.');
+      return;
+    }
+
+    if (semester) {
+      setEditingSemester(semester);
+      semesterForm.setFieldsValue({
+        name: semester.name,
+        startDate: dayjs(semester.start_date),
+        endDate: dayjs(semester.end_date),
+        academicYearId: semester.academic_year_id,
+      });
+    } else {
+      setEditingSemester(null);
+      semesterForm.resetFields();
+      semesterForm.setFieldsValue({
+        academicYearId: yearId,
+      });
+    }
+
+    setIsSemesterModalOpen(true);
+  };
+
+  const handleCloseSemesterModal = () => {
+    setIsSemesterModalOpen(false);
+    setEditingSemester(null);
+    semesterForm.resetFields();
+  };
+
+  const handleSubmitSemester = async () => {
+    try {
+      const values = await semesterForm.validateFields();
+      if (editingSemester) {
+        updateSemesterMutation.mutate({ id: editingSemester.id, data: values });
+      } else {
+        createSemesterMutation.mutate(values);
+      }
+    } catch (error) {
+      console.error('Validation failed:', error);
+    }
+  };
+
+  const detailsYearName = yearsData?.find?.((y: any) => y?.id === detailsYearId)?.name;
+
+  return (
+    <div className="animate-fade-in mx-auto max-w-7xl space-y-8">
+      <PageHeader
+        title="Années Scolaires"
+        description="Gestion des années académiques et périodes scolaires"
+        action={
+          <Button
+            type="primary"
+            icon={<Plus className="h-4 w-4" aria-hidden="true" />}
+            onClick={() => setIsModalOpen(true)}
+            size="large"
+          >
+            Nouvelle Année
+          </Button>
+        }
+      />
+
+      {/* Mise en avant de l'année en cours (pattern “démarrer”) */}
+      {currentYear ? (
+        <GlassCard
+          variant="gradient"
+          className="hover-lift"
+          styles={{ body: { padding: 20 } }}
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 rounded-xl bg-white/15 p-2">
+                <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <div>
+                <div className="text-sm font-medium text-white/80">Année scolaire en cours</div>
+                <div className="mt-0.5 text-xl font-semibold">{currentYear.name}</div>
+                <div className="mt-1 text-sm text-white/75">
+                  Toutes les opérations académiques s’appuient sur cette année (inscriptions, bulletins, etc.).
+                </div>
+              </div>
+            </div>
+          </div>
+        </GlassCard>
+      ) : (
+        <GlassCard
+          variant="glass"
+          className="border border-role-primary/30"
+          styles={{ body: { padding: 20 } }}
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 rounded-xl bg-role-primary/15 p-2">
+                <AlertTriangle className="h-5 w-5 text-role-primary" aria-hidden="true" />
+              </div>
+              <div>
+                <div className="text-sm font-medium">Aucune année scolaire n’est définie “en cours”</div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  Crée une année puis définis-la comme “en cours” pour cadrer les opérations académiques.
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                type="primary"
+                icon={<Plus className="h-4 w-4" aria-hidden="true" />}
+                onClick={() => setIsModalOpen(true)}
+              >
+                Nouvelle année
+              </Button>
+            </div>
+          </div>
+        </GlassCard>
+      )}
+
+      <GlassCard variant="glass" styles={{ body: { padding: '24px' } }}>
+        <Row gutter={[16, 16]} style={{ marginBottom: 16 }} align="middle">
+          <Col xs={24} md={14} lg={12}>
+            <Input
+              placeholder="Rechercher par nom..."
+              prefix={<Search className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
+              value={searchText}
+              onChange={(e) => {
+                setSearchText(e.target.value);
+                setPagination({ ...pagination, current: 1 });
+              }}
+              allowClear
+            />
+          </Col>
+          <Col xs={24} md={10} lg={12}>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+              <div className="text-sm text-muted-foreground">
+                {filteredYears.length} résultat{filteredYears.length > 1 ? 's' : ''}
+              </div>
+            </div>
+          </Col>
+        </Row>
+
+        {error && (
+          <Alert
+            type="error"
+            showIcon
+            className="mb-4"
+            message={`Erreur lors du chargement des données: ${error instanceof Error ? error.message : 'Erreur inconnue'}`}
+          />
+        )}
+
+        {isLoading ? (
+          <div className="py-6">
+            <Row gutter={[24, 24]}>
+              {Array.from({ length: 6 }).map((_, idx) => (
+                <Col key={idx} xs={24} sm={12} lg={8} xl={8}>
+                  <div className="glass rounded-2xl p-5">
+                    <Skeleton active title={{ width: '60%' }} paragraph={{ rows: 2 }} />
+                  </div>
+                </Col>
+              ))}
+            </Row>
+          </div>
+        ) : filteredYears && filteredYears.length > 0 ? (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-2">
+              {filteredYears
+                .slice((pagination.current - 1) * pagination.pageSize, pagination.current * pagination.pageSize)
+                .map((year: any) => (
+                  <div key={year.id} className="h-full">
+                    <AcademicYearCard
+                      name={year.name}
+                      isCurrent={year.isCurrent}
+                      semestersCount={(semestersData || []).filter((s: any) => s.academic_year_id === year.id).length}
+                      onSetCurrent={() => setCurrentMutation.mutate(year.id)}
+                      onCreateSemester={() => handleOpenSemesterModal({ yearId: year.id })}
+                      onViewDetails={() => {
+                        setDetailsYearId(year.id);
+                        setDetailsOpen(true);
+                      }}
+                      onDelete={() => deleteMutation.mutate(year.id)}
+                      setCurrentLoading={setCurrentMutation.isPending}
+                    />
+                  </div>
+                ))}
+            </div>
+            <PaginationBar
+              current={pagination.current}
+              pageSize={pagination.pageSize}
+              total={filteredYears.length}
+              onChange={(page) => setPagination({ ...pagination, current: page })}
+              onPageSizeChange={(size) => setPagination({ current: 1, pageSize: size })}
+            />
+          </>
+        ) : (
+          <EmptyState
+            icon={Calendar}
+            title={
+              yearsData === undefined && !isLoading
+                ? 'Aucune donnée disponible'
+                : 'Aucune année académique trouvée'
+            }
+            description="Créez une nouvelle année scolaire pour commencer."
+            actionLabel="Nouvelle Année"
+            onAction={() => setIsModalOpen(true)}
+          />
+        )}
+      </GlassCard>
+
+      {/* Détails trimestres (popup) */}
+      <Modal
+        title={
+          <Space>
+            <Calendar className="h-5 w-5 text-role-primary" aria-hidden="true" />
+            <span>Trimestres — {detailsYearName || 'Année'}</span>
+          </Space>
+        }
+        open={detailsOpen}
+        onCancel={() => setDetailsOpen(false)}
+        footer={null}
+        width={900}
+        styles={{
+          mask: { backdropFilter: 'blur(10px)', background: 'rgba(0,0,0,0.65)' },
+        }}
+      >
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <div className="text-sm text-muted-foreground">
+            {filteredSemestersForDetails.length} trimestre{filteredSemestersForDetails.length > 1 ? 's' : ''}
+          </div>
+          <Button
+            type="primary"
+            icon={<Plus className="h-4 w-4" aria-hidden="true" />}
+            onClick={() => handleOpenSemesterModal({ yearId: detailsYearId })}
+            disabled={!detailsYearId}
+          >
+            Créer un trimestre
+          </Button>
+        </div>
+
+        {semestersLoading ? (
+          <div className="py-4">
+            <Skeleton active paragraph={{ rows: 4 }} />
+          </div>
+        ) : filteredSemestersForDetails.length === 0 ? (
+          <EmptyState
+            icon={Calendar}
+            title="Aucun trimestre"
+            description="Créez le premier trimestre pour cette année scolaire."
+            actionLabel="Créer un trimestre"
+            onAction={() => handleOpenSemesterModal({ yearId: detailsYearId })}
+          />
+        ) : (
+          <div className="space-y-3">
+            {filteredSemestersForDetails.map((s: any) => (
+              <GlassCard
+                key={s.id}
+                variant="glass"
+                className="hover-lift"
+                styles={{ body: { padding: 16 } }}
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="text-base font-semibold text-foreground">{s.name}</div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      Du {dayjs(s.start_date).format('DD/MM/YYYY')} au {dayjs(s.end_date).format('DD/MM/YYYY')}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="text"
+                      aria-label={`Modifier ${s.name}`}
+                      icon={<Pencil className="h-4 w-4" aria-hidden="true" />}
+                      onClick={() => handleOpenSemesterModal({ yearId: detailsYearId, semester: s })}
+                      className="flex h-10 w-10 items-center justify-center"
+                    />
+                    <Button
+                      type="text"
+                      danger
+                      aria-label={`Supprimer ${s.name}`}
+                      icon={<Trash2 className="h-4 w-4" aria-hidden="true" />}
+                      onClick={() => deleteSemesterMutation.mutate(s.id)}
+                      className="flex h-10 w-10 items-center justify-center"
+                    />
+                  </div>
+                </div>
+              </GlassCard>
+            ))}
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        title={
+          <Space>
+            <Calendar className="h-5 w-5 text-role-primary" aria-hidden="true" />
+            <span>Nouvelle année scolaire</span>
+          </Space>
+        }
+        open={isModalOpen}
+        onOk={handleSubmit}
+        onCancel={handleCancel}
+        okText="Créer"
+        cancelText="Annuler"
+        confirmLoading={createMutation.isPending}
+        width={600}
+        styles={{
+          mask: { backdropFilter: 'blur(10px)', background: 'rgba(0,0,0,0.65)' },
+        }}
+      >
+        <Form
+          form={form}
+          layout="vertical"
+          style={{ marginTop: '24px' }}
+          onValuesChange={(_changedValues, allValues) => {
+            const startYear = allValues.startYear;
+            const endYear = allValues.endYear;
+            if (
+              startYear != null && startYear !== undefined && startYear !== '' &&
+              endYear != null && endYear !== undefined && endYear !== ''
+            ) {
+              form.setFieldsValue({ name: `${startYear}-${endYear}` });
+            }
+          }}
+        >
+          <Form.Item name="name" hidden rules={[{ required: true, message: 'Le nom est requis' }]}>
+            <Input type="hidden" />
+          </Form.Item>
+          <div style={{ display: 'flex', gap: '16px', width: '100%' }}>
+            <Form.Item
+              name="startYear"
+              label="Année de début"
+              rules={[{ required: true, message: 'Année de début requise' }]}
+              style={{ flex: 1, marginBottom: 0 }}
+            >
+              <InputNumber placeholder="2024" style={{ width: '100%' }} precision={0} />
+            </Form.Item>
+            <Form.Item
+              name="endYear"
+              label="Année de fin"
+              rules={[{ required: true, message: 'Année de fin requise' }]}
+              style={{ flex: 1, marginBottom: 0 }}
+            >
+              <InputNumber placeholder="2025" style={{ width: '100%' }} precision={0} />
+            </Form.Item>
+          </div>
+        </Form>
+      </Modal>
+
+      {/* Modal Trimestre (intégré) */}
+      <Modal
+        title={
+          <Space>
+            <Calendar className="h-5 w-5 text-role-primary" aria-hidden="true" />
+            <span>{editingSemester ? 'Modifier le Trimestre' : 'Créer un Trimestre'}</span>
+          </Space>
+        }
+        open={isSemesterModalOpen}
+        onOk={handleSubmitSemester}
+        onCancel={handleCloseSemesterModal}
+        confirmLoading={createSemesterMutation.isPending || updateSemesterMutation.isPending}
+        okText={editingSemester ? 'Modifier' : 'Créer'}
+        cancelText="Annuler"
+        width={600}
+        styles={{
+          mask: { backdropFilter: 'blur(10px)', background: 'rgba(0,0,0,0.65)' },
+        }}
+      >
+        <Form form={semesterForm} layout="vertical" style={{ marginTop: '24px' }}>
+          <Form.Item
+            name="academicYearId"
+            style={{ display: 'none' }}
+            rules={[{ required: true, message: "L'année académique est obligatoire" }]}
+          >
+            <Select />
+          </Form.Item>
+
+          <Form.Item
+            name="name"
+            label="Nom du Trimestre"
+            rules={[
+              { required: true, message: 'Le nom est obligatoire' },
+              { max: 100, message: 'Le nom ne peut pas dépasser 100 caractères' },
+            ]}
+          >
+            <Input placeholder="Ex: Premier Trimestre" />
+          </Form.Item>
+
+          <Form.Item
+            name="startDate"
+            label="Date de Début"
+            rules={[{ required: true, message: 'La date de début est obligatoire' }]}
+          >
+            <DatePicker
+              style={{ width: '100%' }}
+              format="DD/MM/YYYY"
+              placeholder="Sélectionnez la date de début"
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="endDate"
+            label="Date de Fin"
+            rules={[
+              { required: true, message: 'La date de fin est obligatoire' },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  const startDate = getFieldValue('startDate');
+                  if (!value || !startDate) return Promise.resolve();
+                  if (value.isBefore(startDate) || value.isSame(startDate)) {
+                    return Promise.reject(new Error('La date de fin doit être postérieure à la date de début'));
+                  }
+                  return Promise.resolve();
+                },
+              }),
+            ]}
+          >
+            <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" placeholder="Sélectionnez la date de fin" />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  );
+}
+

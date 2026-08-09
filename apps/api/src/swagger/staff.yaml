@@ -1,0 +1,1248 @@
+openapi: 3.0.3
+info:
+  title: Staff Management API
+  description: API for managing school staff and payroll
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:4001/api
+    description: Development server
+
+security:
+  - BearerAuth: []
+
+paths:
+  /staff:
+    get:
+      summary: Get staff list
+      tags: [Staff]
+      parameters:
+        - name: function
+          in: query
+          schema:
+            type: string
+            enum: [ENSEIGNANT, DIRECTEUR, SURVEILLANT, SECRETAIRE, COMPTABLE, MAINTENANCE]
+        - name: contractType
+          in: query
+          schema:
+            type: string
+            enum: [CDI, CDD, VACATAIRE, BENEVOLAT]
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Staff list retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Staff'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      summary: Create new staff member
+      tags: [Staff]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStaffRequest'
+      responses:
+        '201':
+          description: Staff member created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Staff'
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /staff/stats:
+    get:
+      summary: Get staff statistics
+      tags: [Staff]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Staff statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/StaffStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /staff/{id}:
+    get:
+      summary: Get staff member by ID
+      tags: [Staff]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Staff member retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/StaffDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    put:
+      summary: Update staff member
+      tags: [Staff]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStaffRequest'
+      responses:
+        '200':
+          description: Staff member updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Staff'
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Delete staff member
+      tags: [Staff]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Staff member deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /staff/{id}/salaries:
+    get:
+      summary: Get staff salaries
+      tags: [Staff]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: month
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 12
+        - name: year
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [DRAFT, APPROVED, PAID]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Staff salaries retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StaffSalary'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: Generate salary for staff member
+      tags: [Staff]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateSalaryRequest'
+      responses:
+        '201':
+          description: Salary generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/StaffSalary'
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /staff-salaries:
+    get:
+      summary: Get salaries list
+      tags: [Staff Salaries]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: query
+          schema:
+            type: string
+        - name: month
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 12
+        - name: year
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [DRAFT, APPROVED, PAID]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Salaries list retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StaffSalary'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /staff-salaries/overview:
+    get:
+      summary: Get payroll overview
+      tags: [Staff Salaries]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: year
+          in: query
+          schema:
+            type: integer
+        - name: month
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 12
+      responses:
+        '200':
+          description: Payroll overview retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/PayrollOverview'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /staff-salaries/{id}:
+    get:
+      summary: Get salary by ID
+      tags: [Staff Salaries]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Salary retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/StaffSalaryDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Delete salary record
+      tags: [Staff Salaries]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Salary record deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /staff-salaries/{id}/status:
+    put:
+      summary: Update salary status
+      tags: [Staff Salaries]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [DRAFT, APPROVED, PAID]
+              required:
+                - status
+      responses:
+        '200':
+          description: Salary status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/StaffSalary'
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /staff-salaries/{id}/generate-pdf:
+    post:
+      summary: Generate salary slip PDF
+      tags: [Staff Salaries]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Salary slip PDF generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      pdfUrl:
+                        type: string
+                  message:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /staff-salaries/{id}/pdf:
+    get:
+      summary: Get salary slip PDF URL
+      tags: [Staff Salaries]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Salary slip PDF URL retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      pdfUrl:
+                        type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /staff-salaries/bulk-generate:
+    post:
+      summary: Generate salaries in bulk
+      tags: [Staff Salaries]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkGenerateSalaryRequest'
+      responses:
+        '200':
+          description: Bulk salary generation completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      generated:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/StaffSalary'
+                      errors:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            staffId:
+                              type: string
+                            error:
+                              type: string
+                      summary:
+                        type: object
+                        properties:
+                          total:
+                            type: integer
+                          successful:
+                            type: integer
+                          failed:
+                            type: integer
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /staff-salaries/bulk-approve:
+    post:
+      summary: Approve salaries in bulk
+      tags: [Staff Salaries]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                salaryIds:
+                  type: array
+                  items:
+                    type: string
+              required:
+                - salaryIds
+      responses:
+        '200':
+          description: Bulk salary approval completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      approved:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/StaffSalary'
+                      errors:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            salaryId:
+                              type: string
+                            error:
+                              type: string
+                      summary:
+                        type: object
+                        properties:
+                          total:
+                            type: integer
+                          successful:
+                            type: integer
+                          failed:
+                            type: integer
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Staff:
+      type: object
+      properties:
+        id:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        function:
+          type: string
+          enum: [ENSEIGNANT, DIRECTEUR, SURVEILLANT, SECRETAIRE, COMPTABLE, MAINTENANCE]
+        specialization:
+          type: string
+          nullable: true
+        contractType:
+          type: string
+          enum: [CDI, CDD, VACATAIRE, BENEVOLAT]
+        hireDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+          nullable: true
+        baseSalary:
+          type: number
+          format: decimal
+        cvUrl:
+          type: string
+          nullable: true
+        diplomaUrl:
+          type: string
+          nullable: true
+        contractUrl:
+          type: string
+          nullable: true
+        idCardUrl:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        user:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: string
+            username:
+              type: string
+            email:
+              type: string
+        salaries:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffSalary'
+          nullable: true
+
+    StaffDetail:
+      allOf:
+        - $ref: '#/components/schemas/Staff'
+        - type: object
+          properties:
+            mainClasses:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+                  academicYear:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      name:
+                        type: string
+            classSubjects:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  subject:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      name:
+                        type: string
+                  schoolClass:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      name:
+                        type: string
+
+    StaffSalary:
+      type: object
+      properties:
+        id:
+          type: string
+        staffId:
+          type: string
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+        year:
+          type: integer
+        baseSalary:
+          type: number
+          format: decimal
+        allowances:
+          type: number
+          format: decimal
+        overtimeHours:
+          type: number
+          format: decimal
+        overtimeRate:
+          type: number
+          format: decimal
+        bonuses:
+          type: number
+          format: decimal
+        deductions:
+          type: number
+          format: decimal
+        cnpsEmployee:
+          type: number
+          format: decimal
+        incomeTax:
+          type: number
+          format: decimal
+        grossSalary:
+          type: number
+          format: decimal
+        netSalary:
+          type: number
+          format: decimal
+        paymentDate:
+          type: string
+          format: date
+          nullable: true
+        status:
+          type: string
+          enum: [DRAFT, APPROVED, PAID]
+        notes:
+          type: string
+          nullable: true
+        pdfUrl:
+          type: string
+          nullable: true
+        createdBy:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        staff:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: string
+            firstName:
+              type: string
+            lastName:
+              type: string
+            function:
+              type: string
+        creator:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: string
+            username:
+              type: string
+
+    StaffSalaryDetail:
+      allOf:
+        - $ref: '#/components/schemas/StaffSalary'
+        - type: object
+          properties:
+            staff:
+              type: object
+              properties:
+                id:
+                  type: string
+                firstName:
+                  type: string
+                lastName:
+                  type: string
+                function:
+                  type: string
+                baseSalary:
+                  type: number
+                  format: decimal
+
+    StaffStats:
+      type: object
+      properties:
+        totalStaff:
+          type: integer
+        activeStaff:
+          type: integer
+        inactiveStaff:
+          type: integer
+        totalSalaries:
+          type: integer
+        pendingSalaries:
+          type: integer
+        paidSalaries:
+          type: integer
+        monthlyPayroll:
+          type: number
+          format: decimal
+
+    PayrollOverview:
+      type: object
+      properties:
+        period:
+          type: object
+          properties:
+            year:
+              type: integer
+            month:
+              type: integer
+        totalGross:
+          type: number
+          format: decimal
+        totalNet:
+          type: number
+          format: decimal
+        totalDeductions:
+          type: number
+          format: decimal
+        salaryBreakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              status:
+                type: string
+              _count:
+                type: integer
+              _sum:
+                type: object
+                properties:
+                  netSalary:
+                    type: number
+                    format: decimal
+
+    CreateStaffRequest:
+      type: object
+      required:
+        - firstName
+        - lastName
+        - function
+        - contractType
+        - hireDate
+        - baseSalary
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 50
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 50
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          pattern: '^[+]?[\d\s\-()]+$'
+        address:
+          type: string
+        function:
+          type: string
+          enum: [ENSEIGNANT, DIRECTEUR, SURVEILLANT, SECRETAIRE, COMPTABLE, MAINTENANCE]
+        specialization:
+          type: string
+          maxLength: 100
+        contractType:
+          type: string
+          enum: [CDI, CDD, VACATAIRE, BENEVOLAT]
+        hireDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        baseSalary:
+          type: number
+          format: decimal
+          minimum: 0
+        cvUrl:
+          type: string
+        diplomaUrl:
+          type: string
+        contractUrl:
+          type: string
+        idCardUrl:
+          type: string
+
+    UpdateStaffRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 50
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 50
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          pattern: '^[+]?[\d\s\-()]+$'
+        address:
+          type: string
+        function:
+          type: string
+          enum: [ENSEIGNANT, DIRECTEUR, SURVEILLANT, SECRETAIRE, COMPTABLE, MAINTENANCE]
+        specialization:
+          type: string
+          maxLength: 100
+        contractType:
+          type: string
+          enum: [CDI, CDD, VACATAIRE, BENEVOLAT]
+        hireDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        baseSalary:
+          type: number
+          format: decimal
+          minimum: 0
+        cvUrl:
+          type: string
+        diplomaUrl:
+          type: string
+        contractUrl:
+          type: string
+        idCardUrl:
+          type: string
+
+    GenerateSalaryRequest:
+      type: object
+      required:
+        - month
+        - year
+      properties:
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+        year:
+          type: integer
+          minimum: 2020
+          maximum: 2030
+        allowances:
+          type: array
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+              amount:
+                type: number
+                minimum: 0
+          default: []
+        deductions:
+          type: array
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+              amount:
+                type: number
+                minimum: 0
+          default: []
+        overtimeHours:
+          type: number
+          minimum: 0
+          default: 0
+        overtimeRate:
+          type: number
+          minimum: 0
+          default: 0
+        bonuses:
+          type: number
+          minimum: 0
+          default: 0
+        notes:
+          type: string
+
+    BulkGenerateSalaryRequest:
+      type: object
+      required:
+        - staffIds
+        - month
+        - year
+      properties:
+        staffIds:
+          type: array
+          items:
+            type: string
+          minItems: 1
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+        year:
+          type: integer
+          minimum: 2020
+          maximum: 2030
+        allowances:
+          type: array
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+              amount:
+                type: number
+                minimum: 0
+          default: []
+        deductions:
+          type: array
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+              amount:
+                type: number
+                minimum: 0
+          default: []
+        notes:
+          type: string
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+        details:
+          type: object
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+tags:
+  - name: Staff
+    description: Staff management operations
+  - name: Staff Salaries
+    description: Staff salary and payroll operations

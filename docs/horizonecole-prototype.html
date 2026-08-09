@@ -1,0 +1,1629 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="light" data-role="admin">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>HorizonEcole — Prototype UI/UX</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   HORIZONECOLE — DESIGN TOKENS
+   Concept : "Encre & Craie" (ink & chalk) — un bleu-encre pour
+   l'administration, un vert-tableau pour l'espace enseignant,
+   un ambre-craie comme accent chaud partagé.
+   ============================================================ */
+:root{
+  --ink-50:#EEF1FA; --ink-100:#DCE3F5; --ink-200:#B7C4E8; --ink-300:#8FA0D8;
+  --ink-400:#647DC5; --ink-500:#4A5FA8; --ink-600:#34478F; --ink-700:#293770;
+  --ink-800:#202B57; --ink-900:#171F3F;
+
+  --green-50:#EAF5F0; --green-100:#CDE8DC; --green-300:#7FC1A3; --green-400:#4FAE85;
+  --green-500:#2F9468; --green-600:#217A54; --green-700:#1A6144; --green-900:#0F3B2A;
+
+  --amber-50:#FDF3E4; --amber-100:#FBE4C0; --amber-300:#F0BE72; --amber-500:#E8A33D;
+  --amber-600:#CC8722; --amber-700:#A66C1B;
+
+  --success-50:#E4F8F0; --success-500:#16A672; --success-600:#0E8B5E; --success-700:#0B6E4A;
+  --danger-50:#FBEAEC; --danger-500:#D93B4C; --danger-600:#B92C3C;
+  --info-50:#E9F2FB; --info-500:#3C82C4; --info-600:#2C689F; --info-700:#204F79;
+
+  --slate-0:#F5F6FA; --slate-50:#FFFFFF; --slate-100:#ECEEF4; --slate-200:#DEE1EA;
+  --slate-300:#C7CBD9; --slate-500:#8A8FA3; --slate-600:#5C6178; --slate-900:#1B1E2B;
+
+  --bg-page:var(--slate-0);
+  --bg-elevated:var(--slate-50);
+  --bg-subtle:var(--slate-100);
+  --border:var(--slate-200);
+  --border-strong:var(--slate-300);
+  --text-primary:var(--slate-900);
+  --text-secondary:var(--slate-600);
+  --text-tertiary:var(--slate-500);
+
+  --role-accent:var(--ink-600);
+  --role-accent-soft:var(--ink-50);
+  --role-accent-700:var(--ink-700);
+
+  --radius-sm:8px; --radius-md:14px; --radius-lg:20px; --radius-full:999px;
+
+  --shadow-sm:0 1px 2px rgba(23,31,63,.06);
+  --shadow-md:0 4px 16px -4px rgba(23,31,63,.10),0 2px 4px -2px rgba(23,31,63,.06);
+  --shadow-lg:0 16px 40px -12px rgba(23,31,63,.20);
+
+  --dur-fast:120ms; --dur-base:200ms; --dur-slow:320ms;
+  --ease-out:cubic-bezier(.16,1,.3,1);
+  --ease-in-out:cubic-bezier(.4,0,.2,1);
+
+  --font-display:'Space Grotesk','Poppins',system-ui,sans-serif;
+  --font-body:'Inter',system-ui,-apple-system,sans-serif;
+  --font-mono:'IBM Plex Mono',SFMono-Regular,Consolas,monospace;
+
+  --sidebar-w:264px;
+  --topbar-h:64px;
+}
+
+html[data-theme="dark"]{
+  --bg-page:#10121B; --bg-elevated:#181B28; --bg-subtle:#20243A;
+  --border:#2B2F42; --border-strong:#3A3F58;
+  --text-primary:#F1F2F7; --text-secondary:#A6ABC2; --text-tertiary:#6E738C;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+  --shadow-md:0 6px 20px -4px rgba(0,0,0,.5);
+  --shadow-lg:0 24px 48px -12px rgba(0,0,0,.65);
+  --ink-50:#1A2340; --green-50:#122A22; --amber-50:#2A2013;
+  --success-50:#0F2C22; --danger-50:#301419; --info-50:#132534;
+}
+html[data-role="teacher"]{
+  --role-accent:var(--green-600);
+  --role-accent-soft:var(--green-50);
+  --role-accent-700:var(--green-700);
+}
+html[data-theme="dark"][data-role="admin"]{ --role-accent:var(--ink-400); --role-accent-700:var(--ink-300); }
+html[data-theme="dark"][data-role="teacher"]{ --role-accent:var(--green-400); --role-accent-700:var(--green-300); }
+
+*,*::before,*::after{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  margin:0; background:var(--bg-page); color:var(--text-primary);
+  font-family:var(--font-body); font-size:15px; line-height:1.5;
+  -webkit-font-smoothing:antialiased; transition:background var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out);
+}
+h1,h2,h3,h4{ font-family:var(--font-display); margin:0; letter-spacing:-.01em; }
+p{ margin:0; }
+button,input,select,textarea{ font-family:inherit; font-size:inherit; color:inherit; }
+button{ cursor:pointer; }
+a{ color:inherit; text-decoration:none; }
+::selection{ background:var(--role-accent); color:#fff; }
+
+::-webkit-scrollbar{ width:9px; height:9px; }
+::-webkit-scrollbar-thumb{ background:var(--border-strong); border-radius:99px; }
+::-webkit-scrollbar-track{ background:transparent; }
+
+.mono{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+.eyebrow{ font-size:.72rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--text-tertiary); }
+.text-secondary{ color:var(--text-secondary); }
+.text-tertiary{ color:var(--text-tertiary); }
+.sr-only{ position:absolute; width:1px;height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+:focus-visible{ outline:2px solid var(--role-accent); outline-offset:2px; border-radius:6px; }
+
+.app{ display:flex; min-height:100vh; }
+
+.sidebar{
+  width:var(--sidebar-w); flex:none; background:var(--bg-elevated);
+  border-right:1px solid var(--border); display:flex; flex-direction:column;
+  padding:20px 14px; gap:18px; position:sticky; top:0; height:100vh; overflow-y:auto;
+  transition:transform var(--dur-base) var(--ease-out); z-index:40;
+}
+.brand{ display:flex; align-items:center; gap:10px; padding:4px 8px 8px; }
+.brand-mark{
+  width:34px; height:34px; border-radius:10px; background:linear-gradient(155deg,var(--role-accent),var(--role-accent-700));
+  display:flex; align-items:center; justify-content:center; color:#fff; font-family:var(--font-display); font-weight:700;
+  flex:none; box-shadow:var(--shadow-sm);
+}
+.brand-text{ display:flex; flex-direction:column; line-height:1.15; }
+.brand-text strong{ font-family:var(--font-display); font-size:1.02rem; font-weight:700; }
+.brand-text span{ font-size:.72rem; color:var(--text-tertiary); font-weight:500; }
+
+.role-switch{ display:flex; background:var(--bg-subtle); border-radius:var(--radius-md); padding:3px; gap:2px; }
+.role-switch button{
+  flex:1; border:0; background:transparent; padding:7px 8px; border-radius:10px; font-size:.78rem; font-weight:600;
+  color:var(--text-secondary); transition:all var(--dur-fast) var(--ease-out);
+}
+.role-switch button.active{ background:var(--bg-elevated); color:var(--role-accent); box-shadow:var(--shadow-sm); }
+
+.nav{ flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:14px; padding-right:2px; }
+.nav-group-label{ font-size:.68rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--text-tertiary); padding:10px 10px 2px; }
+.nav-item{
+  display:flex; align-items:center; gap:11px; padding:9px 10px; border-radius:11px; border:0; background:transparent;
+  width:100%; text-align:left; color:var(--text-secondary); font-size:.87rem; font-weight:500;
+  transition:background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); position:relative;
+}
+.nav-item svg{ flex:none; width:18px; height:18px; opacity:.85; }
+.nav-item:hover{ background:var(--bg-subtle); color:var(--text-primary); }
+.nav-item.active{ background:var(--role-accent-soft); color:var(--role-accent-700); font-weight:600; }
+.nav-item.active svg{ opacity:1; }
+.nav-item .badge-dot{ margin-left:auto; font-size:.66rem; font-weight:700; background:var(--amber-500); color:#3a2600; border-radius:99px; padding:1px 6px; }
+
+.sidebar-footer{ border-top:1px solid var(--border); padding-top:12px; }
+.user-chip{ display:flex; align-items:center; gap:10px; padding:8px; border-radius:12px; }
+.user-chip:hover{ background:var(--bg-subtle); }
+.user-chip-info{ display:flex; flex-direction:column; line-height:1.2; overflow:hidden; }
+.user-chip-info strong{ font-size:.83rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.user-chip-info span{ font-size:.72rem; color:var(--text-tertiary); }
+
+.main{ flex:1; min-width:0; display:flex; flex-direction:column; }
+
+.topbar{
+  height:var(--topbar-h); flex:none; display:flex; align-items:center; gap:14px; padding:0 24px;
+  border-bottom:1px solid var(--border); background:var(--bg-page); position:sticky; top:0; z-index:30;
+}
+.hamburger{ display:none; background:none; border:0; padding:8px; border-radius:10px; color:var(--text-primary); }
+.hamburger:hover{ background:var(--bg-subtle); }
+.page-title-wrap{ display:flex; flex-direction:column; line-height:1.15; margin-right:4px; }
+.page-title{ font-size:1.05rem; font-weight:700; }
+.page-sub{ font-size:.74rem; color:var(--text-tertiary); }
+
+.topbar-search{
+  flex:1; max-width:360px; display:flex; align-items:center; gap:8px; background:var(--bg-subtle);
+  border:1px solid transparent; border-radius:var(--radius-md); padding:8px 12px; color:var(--text-tertiary);
+  transition:border-color var(--dur-fast) var(--ease-out), background var(--dur-fast);
+}
+.topbar-search:focus-within{ border-color:var(--role-accent); background:var(--bg-elevated); }
+.topbar-search input{ border:0; background:transparent; outline:0; flex:1; color:var(--text-primary); }
+.topbar-search svg{ flex:none; width:16px; height:16px; }
+
+.topbar-actions{ display:flex; align-items:center; gap:6px; margin-left:auto; }
+.icon-btn{
+  position:relative; width:38px; height:38px; border-radius:11px; border:1px solid transparent; background:transparent;
+  display:flex; align-items:center; justify-content:center; color:var(--text-secondary);
+  transition:background var(--dur-fast) var(--ease-out), color var(--dur-fast);
+}
+.icon-btn:hover{ background:var(--bg-subtle); color:var(--text-primary); }
+.icon-btn svg{ width:19px; height:19px; }
+.icon-btn .dot{ position:absolute; top:7px; right:7px; width:7px; height:7px; border-radius:99px; background:var(--danger-500); border:2px solid var(--bg-page); }
+.avatar-btn{ display:flex; align-items:center; gap:8px; padding:4px 6px 4px 4px; border-radius:99px; border:1px solid var(--border); background:var(--bg-elevated); }
+.avatar-btn:hover{ box-shadow:var(--shadow-sm); }
+.avatar-btn svg{ width:14px; height:14px; color:var(--text-tertiary); }
+
+.avatar{ width:34px; height:34px; border-radius:99px; display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-weight:700; font-size:.78rem; color:#fff; flex:none; }
+.avatar-sm{ width:28px; height:28px; font-size:.68rem; }
+.avatar-lg{ width:52px; height:52px; font-size:1.1rem; }
+
+.content{ flex:1; padding:22px 26px 60px; }
+.view{ display:none; animation:viewIn var(--dur-slow) var(--ease-out); }
+.view.active{ display:block; }
+@keyframes viewIn{ from{ opacity:0; transform:translateY(6px);} to{ opacity:1; transform:none; } }
+
+.tabbar{ display:none; }
+
+.dropdown{
+  position:absolute; top:calc(100% + 8px); right:0; background:var(--bg-elevated); border:1px solid var(--border);
+  border-radius:var(--radius-md); box-shadow:var(--shadow-lg); min-width:240px; padding:8px; z-index:60;
+  opacity:0; transform:translateY(-6px) scale(.98); pointer-events:none; transition:all var(--dur-fast) var(--ease-out);
+}
+.dropdown.open{ opacity:1; transform:none; pointer-events:auto; }
+.dropdown-title{ font-size:.78rem; font-weight:700; padding:6px 10px; color:var(--text-tertiary); }
+.dropdown-item{ display:flex; gap:10px; align-items:flex-start; padding:9px 10px; border-radius:10px; width:100%; background:none; border:0; text-align:left; }
+.dropdown-item:hover{ background:var(--bg-subtle); }
+.dropdown-item svg{ width:16px; height:16px; margin-top:2px; flex:none; color:var(--text-tertiary); }
+.dropdown-item strong{ font-size:.82rem; display:block; }
+.dropdown-item span{ font-size:.74rem; color:var(--text-tertiary); }
+.rel{ position:relative; }
+
+/* ============================================================
+   COMPONENTS
+   ============================================================ */
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:7px; border-radius:var(--radius-md);
+  border:1px solid transparent; padding:10px 16px; font-size:.85rem; font-weight:600; transition:all var(--dur-fast) var(--ease-out);
+  white-space:nowrap;
+}
+.btn svg{ width:16px; height:16px; }
+.btn:active{ transform:scale(.97); }
+.btn-primary{ background:var(--role-accent); color:#fff; box-shadow:var(--shadow-sm); }
+.btn-primary:hover{ background:var(--role-accent-700); box-shadow:var(--shadow-md); }
+.btn-secondary{ background:var(--bg-subtle); color:var(--text-primary); }
+.btn-secondary:hover{ background:var(--border); }
+.btn-ghost{ background:transparent; color:var(--text-secondary); }
+.btn-ghost:hover{ background:var(--bg-subtle); color:var(--text-primary); }
+.btn-outline{ background:transparent; border-color:var(--border-strong); color:var(--text-primary); }
+.btn-outline:hover{ border-color:var(--role-accent); color:var(--role-accent-700); }
+.btn-danger{ background:var(--danger-50); color:var(--danger-600); }
+.btn-danger:hover{ background:var(--danger-500); color:#fff; }
+.btn-sm{ padding:7px 12px; font-size:.78rem; border-radius:10px; }
+.btn-lg{ padding:13px 20px; font-size:.92rem; border-radius:var(--radius-md); }
+.btn-icon-only{ padding:9px; }
+.btn-block{ width:100%; }
+
+.field{ display:flex; flex-direction:column; gap:6px; }
+.field label{ font-size:.78rem; font-weight:600; color:var(--text-secondary); }
+.input,.select{
+  border:1.5px solid var(--border); background:var(--bg-elevated); border-radius:var(--radius-sm); padding:10px 12px;
+  font-size:.87rem; color:var(--text-primary); outline:0; transition:border-color var(--dur-fast) var(--ease-out);
+  width:100%;
+}
+.input:focus,.select:focus{ border-color:var(--role-accent); }
+.input::placeholder{ color:var(--text-tertiary); }
+.input-sm{ padding:7px 10px; font-size:.82rem; }
+
+.badge{
+  display:inline-flex; align-items:center; gap:5px; font-size:.72rem; font-weight:700; padding:4px 10px;
+  border-radius:var(--radius-full); line-height:1.3; white-space:nowrap;
+}
+.badge svg{ width:12px; height:12px; }
+.badge-success{ background:var(--success-50); color:var(--success-600); }
+.badge-warning{ background:var(--amber-50); color:var(--amber-700); }
+.badge-danger{ background:var(--danger-50); color:var(--danger-600); }
+.badge-info{ background:var(--info-50); color:var(--info-600); }
+.badge-neutral{ background:var(--bg-subtle); color:var(--text-secondary); }
+.badge-role{ background:var(--role-accent-soft); color:var(--role-accent-700); }
+.badge-dot-i{ width:6px; height:6px; border-radius:99px; background:currentColor; }
+
+.card{
+  background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-sm); position:relative; transition:box-shadow var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out), border-color var(--dur-base);
+  overflow:hidden;
+}
+/* Élément signature : languette "dossier scolaire" en haut de carte */
+.card-accent::before{
+  content:""; position:absolute; top:0; left:20px; width:34px; height:4px; border-radius:0 0 6px 6px;
+  background:var(--accent, var(--role-accent));
+}
+.card-hover:hover{ box-shadow:var(--shadow-md); transform:translateY(-2px); border-color:var(--border-strong); }
+.card-pad{ padding:20px; }
+.card-header{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; }
+.card-title{ font-size:.96rem; font-weight:700; }
+.card-title-row{ display:flex; align-items:center; gap:8px; }
+
+.stat-card{ padding:18px 20px; display:flex; flex-direction:column; gap:10px; }
+.stat-top{ display:flex; align-items:center; justify-content:space-between; }
+.stat-icon{ width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; background:var(--accent-soft, var(--role-accent-soft)); color:var(--accent, var(--role-accent)); }
+.stat-icon svg{ width:18px; height:18px; }
+.stat-value{ font-family:var(--font-mono); font-size:1.7rem; font-weight:600; letter-spacing:-.02em; }
+.stat-label{ font-size:.8rem; color:var(--text-secondary); font-weight:500; }
+.stat-trend{ display:inline-flex; align-items:center; gap:3px; font-size:.74rem; font-weight:700; }
+.stat-trend.up{ color:var(--success-600); }
+.stat-trend.down{ color:var(--danger-600); }
+.stat-trend svg{ width:13px; height:13px; }
+
+.grid{ display:grid; gap:18px; }
+.grid-4{ grid-template-columns:repeat(4,1fr); }
+.grid-3{ grid-template-columns:repeat(3,1fr); }
+.grid-2{ grid-template-columns:repeat(2,1fr); }
+.grid-12{ display:grid; grid-template-columns:repeat(12,1fr); gap:18px; }
+.col-8{ grid-column:span 8; }
+.col-4{ grid-column:span 4; }
+.col-7{ grid-column:span 7; }
+.col-5{ grid-column:span 5; }
+
+.section-heading{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:14px; }
+.section-heading h2{ font-size:1.1rem; font-weight:700; }
+.section-heading .link-more{ font-size:.8rem; font-weight:600; color:var(--role-accent-700); }
+
+.page-header{ display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:22px; flex-wrap:wrap; }
+.page-header h1{ font-size:1.5rem; font-weight:700; }
+.page-header .lede{ color:var(--text-secondary); font-size:.88rem; margin-top:4px; }
+.header-actions{ display:flex; gap:8px; }
+
+.toolbar{ display:flex; align-items:center; gap:10px; margin-bottom:18px; flex-wrap:wrap; }
+.toolbar .input-wrap{ position:relative; flex:1; min-width:200px; max-width:320px; }
+.toolbar .input-wrap svg{ position:absolute; left:11px; top:50%; transform:translateY(-50%); width:16px; height:16px; color:var(--text-tertiary); }
+.toolbar .input-wrap input{ padding-left:34px; }
+.chip-filter{ display:flex; align-items:center; gap:6px; padding:8px 13px; border-radius:99px; border:1.5px solid var(--border); background:var(--bg-elevated); font-size:.8rem; font-weight:600; color:var(--text-secondary); }
+.chip-filter.active{ border-color:var(--role-accent); color:var(--role-accent-700); background:var(--role-accent-soft); }
+.chip-filter svg{ width:14px; height:14px; }
+.view-toggle{ display:flex; border:1.5px solid var(--border); border-radius:11px; padding:2px; margin-left:auto; }
+.view-toggle button{ border:0; background:none; padding:6px 9px; border-radius:8px; color:var(--text-tertiary); display:flex; }
+.view-toggle button.active{ background:var(--role-accent-soft); color:var(--role-accent-700); }
+.view-toggle svg{ width:16px; height:16px; }
+
+/* liste-carte (pattern "Années Scolaires") réutilisé pour élèves / inscriptions / activités */
+.card-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px; }
+.entity-card{ padding:16px; display:flex; flex-direction:column; gap:12px; cursor:pointer; }
+.entity-card-top{ display:flex; gap:12px; align-items:flex-start; }
+.entity-card-meta{ min-width:0; flex:1; }
+.entity-card-meta strong{ display:block; font-size:.92rem; font-weight:700; }
+.entity-card-meta .sub{ font-size:.76rem; color:var(--text-tertiary); }
+.entity-card-foot{ display:flex; align-items:center; justify-content:space-between; padding-top:10px; border-top:1px solid var(--border); }
+.entity-card .id-tag{ font-family:var(--font-mono); font-size:.7rem; color:var(--text-tertiary); }
+
+.stagger > *{ animation:cardIn var(--dur-slow) var(--ease-out) backwards; }
+.stagger > *:nth-child(1){ animation-delay:.02s; } .stagger > *:nth-child(2){ animation-delay:.05s; }
+.stagger > *:nth-child(3){ animation-delay:.08s; } .stagger > *:nth-child(4){ animation-delay:.11s; }
+.stagger > *:nth-child(5){ animation-delay:.14s; } .stagger > *:nth-child(6){ animation-delay:.17s; }
+.stagger > *:nth-child(n+7){ animation-delay:.2s; }
+@keyframes cardIn{ from{ opacity:0; transform:translateY(8px);} to{ opacity:1; transform:none; } }
+
+.empty-state{ display:flex; flex-direction:column; align-items:center; text-align:center; gap:14px; padding:56px 24px; color:var(--text-secondary); }
+.empty-state .empty-icon{ width:56px; height:56px; border-radius:16px; background:var(--bg-subtle); display:flex; align-items:center; justify-content:center; color:var(--text-tertiary); }
+.empty-state .empty-icon svg{ width:26px; height:26px; }
+.empty-state h3{ font-size:1rem; font-weight:700; color:var(--text-primary); }
+.empty-state p{ font-size:.85rem; max-width:320px; }
+
+.skeleton{ position:relative; overflow:hidden; background:var(--bg-subtle); border-radius:var(--radius-sm); }
+.skeleton::after{
+  content:""; position:absolute; inset:0; transform:translateX(-100%);
+  background:linear-gradient(90deg, transparent, rgba(255,255,255,.5), transparent);
+  animation:shimmer 1.3s infinite;
+}
+html[data-theme="dark"] .skeleton::after{ background:linear-gradient(90deg, transparent, rgba(255,255,255,.08), transparent); }
+@keyframes shimmer{ 100%{ transform:translateX(100%); } }
+.skel-card{ height:120px; border-radius:var(--radius-lg); }
+.skel-line{ height:12px; margin-bottom:8px; }
+
+.tabs{ display:flex; gap:4px; border-bottom:1px solid var(--border); margin-bottom:18px; }
+.tab{ border:0; background:none; padding:10px 4px; margin-right:20px; font-size:.86rem; font-weight:600; color:var(--text-tertiary); position:relative; }
+.tab.active{ color:var(--role-accent-700); }
+.tab.active::after{ content:""; position:absolute; left:0; right:0; bottom:-1px; height:2px; background:var(--role-accent); border-radius:2px; }
+
+/* Drawer / modal / toast */
+.scrim{ position:fixed; inset:0; background:rgba(15,17,26,.45); backdrop-filter:blur(2px); opacity:0; pointer-events:none; transition:opacity var(--dur-base) var(--ease-out); z-index:70; }
+.scrim.open{ opacity:1; pointer-events:auto; }
+.drawer{
+  position:fixed; top:0; right:0; height:100%; width:420px; max-width:92vw; background:var(--bg-elevated);
+  border-left:1px solid var(--border); box-shadow:var(--shadow-lg); transform:translateX(100%); transition:transform var(--dur-slow) var(--ease-out);
+  z-index:80; display:flex; flex-direction:column;
+}
+.drawer.open{ transform:none; }
+.drawer-head{ padding:20px 20px 16px; border-bottom:1px solid var(--border); display:flex; align-items:flex-start; gap:14px; }
+.drawer-body{ padding:18px 20px 40px; overflow-y:auto; flex:1; }
+.drawer-close{ margin-left:auto; }
+
+.modal-overlay{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; padding:24px; z-index:90; opacity:0; pointer-events:none; transition:opacity var(--dur-base) var(--ease-out); }
+.modal-overlay.open{ opacity:1; pointer-events:auto; }
+.modal{
+  background:var(--bg-elevated); border-radius:var(--radius-lg); box-shadow:var(--shadow-lg); width:100%; max-width:560px;
+  max-height:86vh; overflow-y:auto; transform:translateY(10px) scale(.98); transition:transform var(--dur-base) var(--ease-out); border:1px solid var(--border);
+}
+.modal-overlay.open .modal{ transform:none; }
+.modal-head{ padding:18px 22px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; }
+.modal-body{ padding:22px; }
+
+.toast-stack{ position:fixed; bottom:22px; right:22px; display:flex; flex-direction:column; gap:10px; z-index:100; }
+.toast{
+  display:flex; align-items:center; gap:10px; background:var(--bg-elevated); border:1px solid var(--border); box-shadow:var(--shadow-lg);
+  border-radius:var(--radius-md); padding:13px 16px; font-size:.85rem; font-weight:600; min-width:260px;
+  animation:toastIn var(--dur-base) var(--ease-out);
+}
+@keyframes toastIn{ from{ opacity:0; transform:translateY(10px) scale(.95); } to{ opacity:1; transform:none; } }
+.toast.leaving{ animation:toastOut var(--dur-base) var(--ease-out) forwards; }
+@keyframes toastOut{ to{ opacity:0; transform:translateX(30px); } }
+.toast-icon{ width:30px; height:30px; border-radius:99px; display:flex; align-items:center; justify-content:center; flex:none; }
+.toast-icon svg{ width:15px; height:15px; }
+.toast.success .toast-icon{ background:var(--success-50); color:var(--success-600); }
+.toast.info .toast-icon{ background:var(--info-50); color:var(--info-600); }
+.toast.warning .toast-icon{ background:var(--amber-50); color:var(--amber-700); }
+
+/* Timetable */
+.timetable-toolbar{ display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+.tt-grid{ display:grid; grid-template-columns:64px repeat(6,1fr); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; background:var(--bg-elevated); }
+.tt-head{ padding:12px 8px; text-align:center; font-size:.76rem; font-weight:700; color:var(--text-secondary); background:var(--bg-subtle); border-bottom:1px solid var(--border); border-left:1px solid var(--border); }
+.tt-head:first-child{ border-left:0; background:var(--bg-elevated); }
+.tt-time{ padding:10px 6px; font-size:.68rem; font-family:var(--font-mono); color:var(--text-tertiary); border-top:1px solid var(--border); text-align:right; padding-right:8px; }
+.tt-cell{ border-top:1px solid var(--border); border-left:1px solid var(--border); padding:5px; min-height:64px; }
+.tt-chip{
+  height:100%; border-radius:10px; padding:7px 9px; font-size:.72rem; font-weight:600; background:var(--accent-soft); color:var(--accent-strong);
+  border-left:3px solid var(--accent); display:flex; flex-direction:column; gap:2px; transition:transform var(--dur-fast) var(--ease-out); cursor:default;
+}
+.tt-chip:hover{ transform:translateY(-1px); }
+.tt-chip span{ font-size:.66rem; font-weight:500; opacity:.85; }
+.tt-chip.exception{ background:repeating-linear-gradient(135deg, var(--danger-50), var(--danger-50) 6px, var(--bg-elevated) 6px, var(--bg-elevated) 12px); border-left-color:var(--danger-500); color:var(--danger-600); }
+
+.agenda-list{ display:none; flex-direction:column; gap:10px; }
+.agenda-day-label{ font-size:.78rem; font-weight:700; color:var(--text-tertiary); text-transform:uppercase; letter-spacing:.05em; margin:14px 0 4px; }
+.agenda-item{ display:flex; gap:12px; align-items:center; padding:12px 14px; border-radius:var(--radius-md); }
+.agenda-time{ font-family:var(--font-mono); font-size:.78rem; font-weight:600; width:48px; flex:none; }
+.agenda-bar{ width:3px; align-self:stretch; border-radius:99px; background:var(--accent); flex:none; }
+.agenda-info strong{ font-size:.86rem; display:block; }
+.agenda-info span{ font-size:.76rem; color:var(--text-tertiary); }
+
+/* Attendance */
+.attendance-summary{ display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+.attendance-summary .pill{ display:flex; align-items:center; gap:8px; padding:9px 14px; border-radius:99px; background:var(--bg-subtle); font-size:.8rem; font-weight:700; }
+.attendance-summary .pill .dot{ width:8px; height:8px; border-radius:99px; }
+.attendance-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; padding-bottom:90px; }
+.att-card{ padding:14px; display:flex; align-items:center; gap:12px; border:1.5px solid var(--border); transition:border-color var(--dur-fast) var(--ease-out); }
+.att-card-name{ flex:1; min-width:0; }
+.att-card-name strong{ font-size:.86rem; display:block; }
+.att-card-name span{ font-size:.72rem; color:var(--text-tertiary); font-family:var(--font-mono); }
+.att-actions{ display:flex; gap:5px; flex:none; }
+.att-btn{ width:32px; height:32px; border-radius:9px; border:1.5px solid var(--border); background:var(--bg-elevated); display:flex; align-items:center; justify-content:center; color:var(--text-tertiary); transition:all var(--dur-fast) var(--ease-out); }
+.att-btn svg{ width:15px; height:15px; }
+.att-btn.present.on{ background:var(--success-500); border-color:var(--success-500); color:#fff; }
+.att-btn.late.on{ background:var(--amber-500); border-color:var(--amber-500); color:#fff; }
+.att-btn.absent.on{ background:var(--danger-500); border-color:var(--danger-500); color:#fff; }
+.att-card.present{ border-color:var(--success-500); }
+.att-card.late{ border-color:var(--amber-500); }
+.att-card.absent{ border-color:var(--danger-500); }
+.sticky-save{ position:sticky; bottom:0; margin-top:18px; padding:14px 18px; background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-lg); box-shadow:var(--shadow-lg); display:flex; align-items:center; gap:14px; }
+.sticky-save .count{ font-size:.82rem; color:var(--text-secondary); }
+
+/* Grade entry */
+.grade-context{ display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+.grade-rows{ display:flex; flex-direction:column; gap:8px; }
+.grade-row{ display:flex; align-items:center; gap:14px; padding:11px 16px; border:1px solid var(--border); }
+.grade-row .rank{ width:22px; font-family:var(--font-mono); font-size:.74rem; color:var(--text-tertiary); flex:none; }
+.grade-row .who{ flex:1; min-width:0; display:flex; align-items:center; gap:10px; }
+.grade-row .who strong{ font-size:.86rem; display:block; }
+.grade-row .who span{ font-size:.72rem; color:var(--text-tertiary); font-family:var(--font-mono); }
+.grade-input-wrap{ display:flex; align-items:center; gap:6px; flex:none; }
+.grade-input{ width:64px; text-align:center; padding:8px 6px; font-family:var(--font-mono); font-weight:600; }
+.grade-input.filled{ border-color:var(--role-accent); background:var(--role-accent-soft); }
+.grade-avg{ width:56px; text-align:center; flex:none; font-family:var(--font-mono); font-weight:700; font-size:.8rem; padding:6px 4px; border-radius:8px; background:var(--bg-subtle); }
+.save-indicator{ display:flex; align-items:center; gap:6px; font-size:.76rem; color:var(--success-600); font-weight:600; opacity:0; transition:opacity var(--dur-base) var(--ease-out); }
+.save-indicator.show{ opacity:1; }
+.save-indicator svg{ width:14px; height:14px; }
+
+/* Inscriptions kanban */
+.kanban{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; align-items:start; }
+.kanban-col-head{ display:flex; align-items:center; gap:8px; padding:4px 6px 12px; font-size:.85rem; font-weight:700; }
+.kanban-col-head .n{ margin-left:auto; font-family:var(--font-mono); font-size:.74rem; color:var(--text-tertiary); background:var(--bg-subtle); padding:2px 8px; border-radius:99px; }
+.kanban-cards{ display:flex; flex-direction:column; gap:10px; min-height:80px; }
+.insc-card{ padding:14px; display:flex; flex-direction:column; gap:8px; }
+.insc-card-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+.insc-card strong{ font-size:.88rem; }
+.insc-card .meta-row{ display:flex; align-items:center; gap:6px; font-size:.75rem; color:var(--text-tertiary); }
+.insc-card .meta-row svg{ width:13px; height:13px; }
+.insc-empty-col{ border:1.5px dashed var(--border); border-radius:var(--radius-md); padding:26px 12px; text-align:center; font-size:.78rem; color:var(--text-tertiary); }
+
+.progress-track{ height:6px; background:var(--bg-subtle); border-radius:99px; overflow:hidden; }
+.progress-fill{ height:100%; border-radius:99px; background:var(--role-accent); transition:width var(--dur-slow) var(--ease-out); }
+
+.placeholder-card{ padding:40px 32px; text-align:center; }
+.divider{ height:1px; background:var(--border); margin:18px 0; border:0; }
+
+/* ============================================================
+   RESPONSIVE — 3 véritables adaptations de mise en page
+   Desktop (>1024px) : sidebar complète avec libellés
+   Tablette (641–1024px) : sidebar réduite à un rail d'icônes
+   Mobile (<=640px) : sidebar en tiroir + barre d'onglets basse
+   ============================================================ */
+
+/* ---- Tablette : rail d'icônes ---- */
+@media (max-width:1024px){
+  .sidebar{ width:78px; padding:20px 10px; align-items:center; }
+  .brand{ justify-content:center; padding:0; }
+  .brand-text,.role-switch span,.nav-group-label,.nav-text,.user-chip-info,.nav-item .badge-dot{ display:none; }
+  .role-switch{ flex-direction:column; }
+  .nav-item{ justify-content:center; padding:11px; }
+  .user-chip{ justify-content:center; }
+  .content{ padding:18px 18px 60px; }
+  .grid-4{ grid-template-columns:repeat(2,1fr); }
+  .grid-12{ grid-template-columns:repeat(1,1fr); }
+  .col-8,.col-4,.col-7,.col-5{ grid-column:span 1; }
+  .attendance-grid{ grid-template-columns:repeat(2,1fr); }
+  .kanban{ grid-template-columns:1fr; }
+  .kanban-cards{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+  .tt-wrap{ overflow-x:auto; }
+  .tt-grid{ min-width:760px; }
+}
+
+/* ---- Mobile : tiroir + barre d'onglets ---- */
+@media (max-width:640px){
+  .hamburger{ display:flex; }
+  .sidebar{
+    position:fixed; left:0; top:0; width:min(300px,84vw); transform:translateX(-100%); box-shadow:var(--shadow-lg);
+    padding:20px 16px; align-items:stretch;
+  }
+  .sidebar.open{ transform:none; }
+  .brand-text,.role-switch span,.nav-group-label,.nav-text,.user-chip-info{ display:flex; }
+  .role-switch{ flex-direction:row; }
+  .nav-item{ justify-content:flex-start; }
+  .sidebar-scrim.open{ display:block; }
+  .topbar{ padding:0 14px; gap:8px; }
+  .topbar-search{ display:none; }
+  .page-sub{ display:none; }
+  .content{ padding:14px 14px 90px; }
+  .grid-4,.grid-3,.grid-2{ grid-template-columns:1fr 1fr; }
+  .stat-card .stat-value{ font-size:1.4rem; }
+  .grid-12{ grid-template-columns:1fr; }
+  .col-8,.col-4,.col-7,.col-5{ grid-column:span 1; }
+  .attendance-grid{ grid-template-columns:1fr; padding-bottom:110px; }
+  .kanban-cards{ grid-template-columns:1fr; }
+  .kanban{ grid-template-columns:1fr; }
+  .page-header{ flex-direction:column; align-items:stretch; }
+  .header-actions{ justify-content:stretch; }
+  .header-actions .btn{ flex:1; }
+  .tt-wrap .tt-grid{ display:none; }
+  .agenda-list{ display:flex; }
+  .grade-row{ flex-wrap:wrap; }
+  .drawer{ width:100%; max-width:100%; }
+  .sticky-save{ position:fixed; left:14px; right:14px; bottom:70px; z-index:55; }
+
+  .tabbar{
+    display:flex; position:fixed; bottom:0; left:0; right:0; height:66px; background:var(--bg-elevated);
+    border-top:1px solid var(--border); z-index:50; padding:0 4px; box-shadow:0 -4px 16px rgba(0,0,0,.05);
+  }
+  .tabbar button{ flex:1; border:0; background:none; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; color:var(--text-tertiary); font-size:.62rem; font-weight:600; }
+  .tabbar button svg{ width:20px; height:20px; }
+  .tabbar button.active{ color:var(--role-accent-700); }
+}
+
+@media (min-width:641px){ .sidebar-scrim{ display:none !important; } }
+.sidebar-scrim{ position:fixed; inset:0; background:rgba(15,17,26,.45); z-index:39; opacity:0; pointer-events:none; transition:opacity var(--dur-base) var(--ease-out); }
+.sidebar-scrim.open{ opacity:1; pointer-events:auto; }
+</style>
+</head>
+<body>
+<div class="sidebar-scrim" id="sidebarScrim"></div>
+<div class="app">
+
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark">HE</div>
+      <div class="brand-text"><strong>HorizonEcole</strong><span>École Le Souverain</span></div>
+    </div>
+
+    <div class="role-switch" role="tablist" aria-label="Aperçu du rôle (démo)">
+      <button class="active" data-role-btn="admin" id="roleBtnAdmin">Administration</button>
+      <button data-role-btn="teacher" id="roleBtnTeacher">Enseignant</button>
+    </div>
+
+    <nav class="nav" id="navList"><!-- généré en JS --></nav>
+
+    <div class="sidebar-footer">
+      <button class="user-chip" id="userChipBtn" style="width:100%;border:0;">
+        <span class="avatar avatar-sm" style="background:var(--role-accent)" id="userAvatar">MK</span>
+        <span class="user-chip-info">
+          <strong id="userName">Mickael K.</strong>
+          <span id="userRoleLabel">Administrateur</span>
+        </span>
+      </button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <button class="hamburger" id="hamburgerBtn" aria-label="Ouvrir le menu"><span data-icon="menu"></span></button>
+      <div class="page-title-wrap">
+        <span class="page-title" id="pageTitle">Tableau de bord</span>
+        <span class="page-sub" id="pageSub">Année scolaire 2025–2026 · 2nd trimestre</span>
+      </div>
+      <div class="topbar-search">
+        <span data-icon="search"></span>
+        <input type="text" placeholder="Rechercher un élève, une classe…">
+      </div>
+      <div class="topbar-actions">
+        <button class="icon-btn" id="themeToggle" aria-label="Changer d'apparence"><span data-icon="sun"></span></button>
+        <div class="rel">
+          <button class="icon-btn" id="notifBtn" aria-label="Notifications"><span data-icon="bell"></span><span class="dot"></span></button>
+          <div class="dropdown" id="notifDropdown">
+            <div class="dropdown-title">Notifications</div>
+            <button class="dropdown-item"><span data-icon="alert-triangle"></span><span><strong>3 absences non justifiées</strong><span>Classe de 4ème B · à traiter</span></span></button>
+            <button class="dropdown-item"><span data-icon="book"></span><span><strong>Bulletins du 2ème trimestre</strong><span>Génération disponible depuis hier</span></span></button>
+            <button class="dropdown-item"><span data-icon="calendar"></span><span><strong>Salle modifiée</strong><span>Physique-Chimie · 3ème A · demain 10h</span></span></button>
+          </div>
+        </div>
+        <div class="rel">
+          <button class="avatar-btn" id="avatarMenuBtn">
+            <span class="avatar avatar-sm" style="background:var(--role-accent)">MK</span>
+            <span data-icon="chevron-down"></span>
+          </button>
+          <div class="dropdown" id="avatarDropdown" style="min-width:200px;">
+            <div class="dropdown-title">Mickael K.</div>
+            <button class="dropdown-item"><span data-icon="user"></span><span><strong>Mon profil</strong></span></button>
+            <button class="dropdown-item"><span data-icon="settings"></span><span><strong>Paramètres</strong></span></button>
+            <button class="dropdown-item"><span data-icon="log-out"></span><span><strong>Se déconnecter</strong></span></button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="content" id="content">
+
+      <!-- ============ VUE 1 : TABLEAU DE BORD ADMIN ============ -->
+      <section class="view active" data-view="admin-dashboard">
+        <div class="page-header">
+          <div>
+            <h1>Bonjour Mickael 👋</h1>
+            <p class="lede">Voici l'activité de l'établissement aujourd'hui, mardi 10 février.</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-secondary" data-goto="students"><span data-icon="users"></span>Gérer les élèves</button>
+            <button class="btn btn-primary" data-goto="inscriptions"><span data-icon="plus"></span>Nouvelle inscription</button>
+          </div>
+        </div>
+
+        <div class="grid grid-4" id="adminKpiGrid" style="margin-bottom:22px;"></div>
+
+        <div class="grid-12">
+          <div class="col-8">
+            <div class="card card-pad">
+              <div class="section-heading"><h2>Activité récente</h2><span class="link-more">Tout voir</span></div>
+              <div id="activityFeed" style="display:flex;flex-direction:column;gap:2px;"></div>
+            </div>
+          </div>
+          <div class="col-4" style="display:flex;flex-direction:column;gap:18px;">
+            <div class="card card-pad">
+              <div class="section-heading" style="margin-bottom:12px;"><h2>Répartition des effectifs</h2></div>
+              <div id="repartitionChart" style="display:flex;flex-direction:column;gap:12px;"></div>
+            </div>
+            <div class="card card-pad">
+              <div class="section-heading" style="margin-bottom:10px;"><h2>Actions rapides</h2></div>
+              <div style="display:flex;flex-direction:column;gap:8px;">
+                <button class="btn btn-outline btn-block" style="justify-content:flex-start;" data-goto="inscriptions"><span data-icon="clipboard"></span>Nouvelle inscription</button>
+                <button class="btn btn-outline btn-block" style="justify-content:flex-start;" data-goto="placeholder" data-title="Classes"><span data-icon="layers"></span>Créer une classe</button>
+                <button class="btn btn-outline btn-block" style="justify-content:flex-start;" data-goto="timetable"><span data-icon="calendar"></span>Modifier l'emploi du temps</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ VUE 2 : TABLEAU DE BORD ENSEIGNANT ============ -->
+      <section class="view" data-view="teacher-dashboard">
+        <div class="page-header">
+          <div>
+            <h1>Bonjour Aïcha 👋</h1>
+            <p class="lede">Vous avez <strong id="teacherCourseCount">4 cours</strong> aujourd'hui, mardi 10 février.</p>
+          </div>
+        </div>
+
+        <div class="grid-12">
+          <div class="col-8">
+            <div class="section-heading"><h2>Mes cours du jour</h2></div>
+            <div id="teacherClassesToday" class="stagger" style="display:flex;flex-direction:column;gap:12px;"></div>
+          </div>
+          <div class="col-4" style="display:flex;flex-direction:column;gap:18px;">
+            <div class="card card-pad">
+              <div class="section-heading" style="margin-bottom:10px;"><h2>Actions rapides</h2></div>
+              <div style="display:flex;flex-direction:column;gap:8px;">
+                <button class="btn btn-outline btn-block" style="justify-content:flex-start;" data-goto="attendance"><span data-icon="check-square"></span>Faire l'appel</button>
+                <button class="btn btn-outline btn-block" style="justify-content:flex-start;" data-goto="grades"><span data-icon="book"></span>Saisir des notes</button>
+                <button class="btn btn-outline btn-block" style="justify-content:flex-start;" data-goto="timetable"><span data-icon="calendar"></span>Mon emploi du temps</button>
+              </div>
+            </div>
+            <div class="card card-pad">
+              <div class="section-heading" style="margin-bottom:10px;"><h2>À traiter</h2></div>
+              <div style="display:flex;flex-direction:column;gap:10px;">
+                <div style="display:flex;gap:10px;align-items:flex-start;">
+                  <span class="badge badge-warning" style="margin-top:2px;"><span data-icon="alert-triangle"></span></span>
+                  <div><strong style="font-size:.84rem;display:block;">2 absences à justifier</strong><span class="text-tertiary" style="font-size:.76rem;">Classe de 3ème A</span></div>
+                </div>
+                <div style="display:flex;gap:10px;align-items:flex-start;">
+                  <span class="badge badge-info" style="margin-top:2px;"><span data-icon="book"></span></span>
+                  <div><strong style="font-size:.84rem;display:block;">Moyennes à valider</strong><span class="text-tertiary" style="font-size:.76rem;">Mathématiques · 4ème B</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ VUE 3 : ÉLÈVES ============ -->
+      <section class="view" data-view="students">
+        <div class="page-header">
+          <div>
+            <h1>Élèves</h1>
+            <p class="lede" id="studentsLede">142 élèves inscrits sur l'année 2025–2026</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-primary"><span data-icon="plus"></span>Nouvel élève</button>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <div class="input-wrap">
+            <span data-icon="search"></span>
+            <input type="text" class="input" id="studentSearch" placeholder="Rechercher un nom, un matricule…">
+          </div>
+          <button class="chip-filter active" data-classe-filter="all"><span data-icon="filter"></span>Toutes les classes</button>
+          <button class="chip-filter" data-classe-filter="6ème A">6ème A</button>
+          <button class="chip-filter" data-classe-filter="4ème B">4ème B</button>
+          <button class="chip-filter" data-classe-filter="3ème A">3ème A</button>
+          <div class="view-toggle">
+            <button class="active" id="studentsGridBtn" title="Vue cartes"><span data-icon="grid"></span></button>
+            <button id="studentsListBtn" title="Vue liste"><span data-icon="list"></span></button>
+          </div>
+        </div>
+
+        <div id="studentsSkeleton" class="card-grid" style="display:none;">
+          <div class="skeleton skel-card"></div><div class="skeleton skel-card"></div><div class="skeleton skel-card"></div>
+          <div class="skeleton skel-card"></div><div class="skeleton skel-card"></div><div class="skeleton skel-card"></div>
+        </div>
+        <div id="studentsGrid" class="card-grid stagger"></div>
+        <div id="studentsEmpty" class="empty-state" style="display:none;">
+          <div class="empty-icon"><span data-icon="search"></span></div>
+          <h3>Aucun élève ne correspond à votre recherche</h3>
+          <p>Essayez un autre nom, matricule, ou réinitialisez les filtres de classe.</p>
+          <button class="btn btn-secondary btn-sm" id="resetStudentFilters">Réinitialiser les filtres</button>
+        </div>
+      </section>
+
+      <!-- ============ VUE 4 : EMPLOI DU TEMPS ============ -->
+      <section class="view" data-view="timetable">
+        <div class="page-header">
+          <div>
+            <h1 id="ttTitle">Emploi du temps</h1>
+            <p class="lede" id="ttSubtitle">Semaine du 9 au 14 février · 2nd trimestre</p>
+          </div>
+          <div class="header-actions" id="ttAdminSelectors">
+            <select class="select" id="ttClasseSelect" style="width:auto;">
+              <option>6ème A</option><option selected>4ème B</option><option>3ème A</option>
+            </select>
+            <div class="view-toggle">
+              <button class="active" data-tt-scope="classe">Vue classe</button>
+              <button data-tt-scope="teacher">Vue enseignant</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:14px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
+          <span class="badge badge-neutral"><span class="badge-dot-i" style="background:var(--ink-500)"></span>Cours</span>
+          <span class="badge badge-danger"><span data-icon="alert-triangle"></span>Exception (annulé / salle modifiée)</span>
+        </div>
+
+        <div class="tt-wrap" style="overflow-x:auto;">
+          <div class="tt-grid" id="ttGrid"></div>
+        </div>
+        <div class="agenda-list" id="ttAgenda"></div>
+      </section>
+
+      <!-- ============ VUE 5 : SAISIE DES NOTES / BULLETIN ============ -->
+      <section class="view" data-view="grades">
+        <div class="page-header">
+          <div>
+            <h1>Saisie des notes</h1>
+            <p class="lede">Le parcours le plus utilisé : pensé pour aller vite, ligne par ligne.</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-secondary" id="previewBulletinBtn"><span data-icon="book"></span>Aperçu du bulletin</button>
+          </div>
+        </div>
+
+        <div class="grade-context">
+          <div class="field" style="min-width:160px;"><label>Classe</label><select class="select" id="gradeClasseSelect"><option>4ème B</option><option>3ème A</option><option>6ème A</option></select></div>
+          <div class="field" style="min-width:160px;"><label>Matière</label><select class="select"><option>Mathématiques</option><option>Physique-Chimie</option></select></div>
+          <div class="field" style="min-width:160px;"><label>Évaluation</label><select class="select"><option>Devoir surveillé n°2</option><option>Interrogation écrite</option></select></div>
+          <div class="field" style="min-width:110px;"><label>Coefficient</label><input class="input" value="2" style="text-align:center;"></div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-ghost btn-sm" id="fillAllBtn"><span data-icon="check"></span>Appliquer 15 à tous</button>
+            <button class="btn btn-ghost btn-sm"><span data-icon="download"></span>Copier l'évaluation précédente</button>
+          </div>
+          <span class="save-indicator" id="saveIndicator"><span data-icon="check"></span>Notes enregistrées</span>
+        </div>
+
+        <div class="grade-rows" id="gradeRows"></div>
+
+        <div class="sticky-save" style="position:sticky;">
+          <span class="count">Moyenne de classe : <strong class="mono" id="classAvg">—</strong>/20 · <span id="gradeCompletion">0/24</span> notes saisies</span>
+          <button class="btn btn-primary" style="margin-left:auto;" id="saveGradesBtn"><span data-icon="check"></span>Enregistrer les notes</button>
+        </div>
+      </section>
+
+      <!-- ============ VUE 6 : PRISE DE PRÉSENCE ============ -->
+      <section class="view" data-view="attendance">
+        <div class="page-header">
+          <div>
+            <h1>Appel — 4ème B</h1>
+            <p class="lede">Mathématiques · Aujourd'hui 10h00–11h00 · Salle 12</p>
+          </div>
+        </div>
+
+        <div class="attendance-summary">
+          <span class="pill"><span class="dot" style="background:var(--success-500)"></span><span id="countPresent">27</span> présents</span>
+          <span class="pill"><span class="dot" style="background:var(--amber-500)"></span><span id="countLate">0</span> retards</span>
+          <span class="pill"><span class="dot" style="background:var(--danger-500)"></span><span id="countAbsent">0</span> absents</span>
+          <button class="btn btn-ghost btn-sm" style="margin-left:auto;" id="markAllPresentBtn"><span data-icon="check"></span>Tout marquer présent</button>
+        </div>
+
+        <div class="attendance-grid" id="attendanceGrid"></div>
+
+        <div class="sticky-save">
+          <span class="count">Appel du <strong>10 février</strong> — enregistré automatiquement en brouillon</span>
+          <button class="btn btn-primary" style="margin-left:auto;" id="saveAttendanceBtn"><span data-icon="check"></span>Enregistrer l'appel</button>
+        </div>
+      </section>
+
+      <!-- ============ VUE 7 : INSCRIPTIONS ============ -->
+      <section class="view" data-view="inscriptions">
+        <div class="page-header">
+          <div>
+            <h1>Inscriptions</h1>
+            <p class="lede">Suivi des candidatures pour l'année 2026–2027</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-primary" id="newInscriptionBtn"><span data-icon="plus"></span>Nouvelle inscription</button>
+          </div>
+        </div>
+
+        <div class="grid grid-3" style="margin-bottom:20px;">
+          <div class="card card-pad stat-card"><div class="stat-top"><span class="stat-label">Total des candidatures</span></div><span class="stat-value mono">58</span></div>
+          <div class="card card-pad stat-card"><div class="stat-top"><span class="stat-label">En attente de traitement</span></div><span class="stat-value mono" style="color:var(--amber-700)">14</span></div>
+          <div class="card card-pad stat-card"><div class="stat-top"><span class="stat-label">Validées ce mois-ci</span></div><span class="stat-value mono" style="color:var(--success-600)">9</span></div>
+        </div>
+
+        <div class="kanban" id="inscriptionsKanban"></div>
+      </section>
+
+      <!-- ============ VUE GÉNÉRIQUE : MODULES NON DÉTAILLÉS ============ -->
+      <section class="view" data-view="placeholder">
+        <div class="page-header"><div><h1 id="placeholderTitle">Module</h1><p class="lede">Cet écran applique le même design system — cartes, tableaux, formulaires et badges déjà spécifiés.</p></div></div>
+        <div class="card placeholder-card">
+          <div class="empty-icon" style="margin:0 auto 14px;"><span data-icon="layers"></span></div>
+          <h3 style="margin-bottom:6px;">Écran non détaillé dans les maquettes prioritaires</h3>
+          <p class="text-secondary" style="max-width:440px;margin:0 auto;font-size:.86rem;">Il réutilise les composants du design system (cartes de liste, tableaux d'affectation, formulaires, badges de statut) documentés dans le guide de handoff, avec la même hiérarchie de navigation.</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<nav class="tabbar" id="tabbar"></nav>
+
+<div class="scrim" id="scrim"></div>
+
+<aside class="drawer" id="studentDrawer">
+  <div class="drawer-head">
+    <span class="avatar avatar-lg" id="drawerAvatar" style="background:var(--role-accent)">—</span>
+    <div style="flex:1;">
+      <h3 id="drawerName" style="font-size:1.05rem;">—</h3>
+      <span class="text-tertiary mono" id="drawerMatricule" style="font-size:.78rem;">—</span>
+    </div>
+    <button class="icon-btn drawer-close" id="drawerCloseBtn"><span data-icon="x"></span></button>
+  </div>
+  <div class="drawer-body">
+    <div class="tabs">
+      <button class="tab active" data-drawer-tab="profil">Profil</button>
+      <button class="tab" data-drawer-tab="parents">Parents</button>
+      <button class="tab" data-drawer-tab="notes">Notes</button>
+      <button class="tab" data-drawer-tab="presences">Présences</button>
+    </div>
+    <div id="drawerPanelProfil" class="drawer-panel">
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div class="card card-pad" style="display:flex;justify-content:space-between;"><span class="text-secondary" style="font-size:.82rem;">Classe</span><strong id="drawerClasse">—</strong></div>
+        <div class="card card-pad" style="display:flex;justify-content:space-between;"><span class="text-secondary" style="font-size:.82rem;">Date de naissance</span><strong>12/04/2013</strong></div>
+        <div class="card card-pad" style="display:flex;justify-content:space-between;"><span class="text-secondary" style="font-size:.82rem;">Statut</span><span class="badge badge-success">Actif</span></div>
+      </div>
+    </div>
+    <div id="drawerPanelParents" class="drawer-panel" style="display:none;">
+      <div class="card card-pad" style="display:flex;gap:12px;align-items:center;">
+        <span class="avatar avatar-sm" style="background:var(--info-500)">PK</span>
+        <div style="flex:1;"><strong style="font-size:.86rem;display:block;">Parent référent</strong><span class="text-tertiary" style="font-size:.76rem;">+225 07 00 00 00 00</span></div>
+        <button class="icon-btn"><span data-icon="phone"></span></button>
+      </div>
+    </div>
+    <div id="drawerPanelNotes" class="drawer-panel" style="display:none;">
+      <div class="card card-pad stat-card"><span class="stat-label">Moyenne générale — 2nd trimestre</span><span class="stat-value mono">14.2</span></div>
+    </div>
+    <div id="drawerPanelPresences" class="drawer-panel" style="display:none;">
+      <div class="card card-pad stat-card"><span class="stat-label">Taux de présence — année en cours</span><span class="stat-value mono" style="color:var(--success-600)">96%</span></div>
+    </div>
+  </div>
+</aside>
+
+<div class="modal-overlay" id="bulletinModal">
+  <div class="modal">
+    <div class="modal-head"><h3 style="font-size:1rem;">Aperçu du bulletin — 2nd trimestre</h3><button class="icon-btn" style="margin-left:auto;" id="closeBulletinBtn"><span data-icon="x"></span></button></div>
+    <div class="modal-body" id="bulletinBody"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="inscriptionModal">
+  <div class="modal">
+    <div class="modal-head"><h3 style="font-size:1rem;">Nouvelle inscription</h3><button class="icon-btn" style="margin-left:auto;" id="closeInscriptionBtn"><span data-icon="x"></span></button></div>
+    <div class="modal-body">
+      <div style="display:flex;gap:8px;margin-bottom:20px;">
+        <div class="progress-track" style="flex:1;"><div class="progress-fill" style="width:33%"></div></div>
+        <div class="progress-track" style="flex:1;"><div class="progress-fill" style="width:0"></div></div>
+        <div class="progress-track" style="flex:1;"><div class="progress-fill" style="width:0"></div></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div class="field"><label>Nom et prénoms de l'élève</label><input class="input" placeholder="Ex. Konan Aya Grace"></div>
+        <div class="field"><label>Classe visée</label><select class="select"><option>6ème A</option><option>2nde C</option></select></div>
+        <div class="field"><label>Contact du parent</label><input class="input" placeholder="+225 07 00 00 00 00"></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:22px;">
+        <button class="btn btn-secondary" id="closeInscriptionBtn2">Annuler</button>
+        <button class="btn btn-primary" id="submitInscriptionBtn"><span data-icon="arrow-right"></span>Étape suivante</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toastStack"></div>
+
+<style>
+/* Ajustements complémentaires */
+.card-grid.list-mode{ grid-template-columns:1fr; }
+.card-grid.list-mode .entity-card{ flex-direction:row; align-items:center; padding:12px 16px; }
+.card-grid.list-mode .entity-card-top{ flex:1; align-items:center; }
+.card-grid.list-mode .entity-card-foot{ border-top:0; padding-top:0; flex:none; gap:10px; }
+.drawer-panel{ animation:viewIn var(--dur-base) var(--ease-out); }
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{ animation-duration:.001ms !important; transition-duration:.001ms !important; }
+}
+</style>
+<script>
+/* ============================================================
+   ICÔNES — set minimal dessiné à la main (style trait fin, 1.7px)
+   ============================================================ */
+const ICONS = {
+  home:'<path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h5v-5h2v5h5v-9"/>',
+  users:'<circle cx="9" cy="8" r="3"/><path d="M2.5 19.5c0-3.5 3-5.5 6.5-5.5s6.5 2 6.5 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14c2.6.4 4.7 2.3 4.7 5.5"/>',
+  user:'<circle cx="12" cy="8" r="3.3"/><path d="M5 20c0-3.9 3.1-6.3 7-6.3s7 2.4 7 6.3"/>',
+  calendar:'<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 9.5h17"/><path d="M8 3v4"/><path d="M16 3v4"/>',
+  book:'<path d="M4 5.5C4 4.7 4.7 4 5.5 4H12v16H5.5C4.7 20 4 19.3 4 18.5z"/><path d="M20 5.5c0-.8-.7-1.5-1.5-1.5H12v16h6.5c.8 0 1.5-.7 1.5-1.5z"/>',
+  'check-square':'<rect x="3.5" y="3.5" width="17" height="17" rx="3"/><path d="M8 12.5l2.6 2.6L16.5 9"/>',
+  clipboard:'<rect x="6" y="4" width="12" height="17" rx="2"/><rect x="9" y="2.3" width="6" height="3" rx="1"/><path d="M9 11h6"/><path d="M9 15h6"/>',
+  layers:'<path d="M12 3l8 4.2-8 4.2-8-4.2z"/><path d="M4 12l8 4.2 8-4.2"/><path d="M4 16l8 4.2 8-4.2"/>',
+  building:'<rect x="5" y="3" width="14" height="18" rx="1"/><path d="M9 7h1M14 7h1M9 11h1M14 11h1M9 15h1M14 15h1"/><path d="M10 21v-4h4v4"/>',
+  bell:'<path d="M6 10a6 6 0 0 1 12 0c0 4 1.5 5.5 1.5 5.5h-15S6 14 6 10z"/><path d="M10 18a2 2 0 0 0 4 0"/>',
+  search:'<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.3-4.3"/>',
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 3v2.2M12 18.8v2.2M3 12h2.2M18.8 12h2.2M5.3 5.3l1.5 1.5M17.2 17.2l1.5 1.5M18.7 5.3l-1.5 1.5M6.8 17.2l-1.5 1.5"/>',
+  moon:'<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/>',
+  menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',
+  x:'<path d="M6 6l12 12M18 6L6 18"/>',
+  'chevron-down':'<path d="M6 9l6 6 6-6"/>',
+  'chevron-right':'<path d="M9 6l6 6-6 6"/>',
+  'chevron-left':'<path d="M15 6l-6 6 6 6"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  filter:'<path d="M4 5h16l-6 7.5V18l-4 2v-7.5z"/>',
+  grid:'<rect x="3.5" y="3.5" width="7.5" height="7.5" rx="1.5"/><rect x="13" y="3.5" width="7.5" height="7.5" rx="1.5"/><rect x="3.5" y="13" width="7.5" height="7.5" rx="1.5"/><rect x="13" y="13" width="7.5" height="7.5" rx="1.5"/>',
+  list:'<path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1" fill="currentColor" stroke="none"/><circle cx="4" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="4" cy="18" r="1" fill="currentColor" stroke="none"/>',
+  'alert-triangle':'<path d="M12 4.5l9 15.5H3z"/><path d="M12 10v4"/><circle cx="12" cy="17" r=".6" fill="currentColor" stroke="none"/>',
+  clock:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  mail:'<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="M4 6.5l8 6 8-6"/>',
+  phone:'<path d="M6 3.5h3l1.5 4-2 1.5a12 12 0 0 0 6.5 6.5l1.5-2 4 1.5v3a2 2 0 0 1-2.2 2C10.5 20 4 13.5 4 5.7A2 2 0 0 1 6 3.5z"/>',
+  download:'<path d="M12 3v12M8 11l4 4 4-4"/><path d="M4 19h16"/>',
+  'arrow-right':'<path d="M4 12h16M14 6l6 6-6 6"/>',
+  'log-out':'<path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3"/><path d="M14 8l4 4-4 4"/><path d="M18 12H9"/>',
+  settings:'<circle cx="12" cy="12" r="3"/><path d="M12 2.5v2.4M12 19.1v2.4M4.2 7l2 1.2M17.8 15.8l2 1.2M4.2 17l2-1.2M17.8 8.2l2-1.2M2.5 12h2.4M19.1 12h2.4"/>',
+  check:'<path d="M5 13l4 4L19 7"/>',
+  'trend-up':'<path d="M4 16l5-6 4 4 7-8"/><path d="M15 6h5v5"/>',
+  'trend-down':'<path d="M4 8l5 6 4-4 7 8"/><path d="M15 18h5v-5"/>'
+};
+function icon(name){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'+(ICONS[name]||'')+'</svg>'; }
+function paintIcons(root){ (root||document).querySelectorAll('[data-icon]').forEach(el=>{ el.innerHTML = icon(el.getAttribute('data-icon')); }); }
+
+/* ============================================================
+   DONNÉES DE DÉMONSTRATION
+   ============================================================ */
+const AVATAR_COLORS = ['#34478F','#217A54','#CC8722','#2C689F','#B92C3C','#7C5CBF'];
+function colorFor(seed){ let h=0; for(const c of seed) h=(h*31+c.charCodeAt(0))>>>0; return AVATAR_COLORS[h%AVATAR_COLORS.length]; }
+function initials(first,last){ return (first[0]+last[0]).toUpperCase(); }
+
+const STUDENTS = [
+  {id:1, first:'Aya', last:'Konan', matricule:'ELS-25-0142', classe:'6ème A', status:'Actif', parent:'Konan Serge'},
+  {id:2, first:'Yves', last:'Kouassi', matricule:'ELS-25-0098', classe:'4ème B', status:'Actif', parent:'Kouassi Alice'},
+  {id:3, first:'Fatou', last:'Diabaté', matricule:'ELS-25-0077', classe:'3ème A', status:'Actif', parent:'Diabaté Oumar'},
+  {id:4, first:'Junior', last:'N\'Guessan', matricule:'ELS-25-0112', classe:'6ème A', status:'Actif', parent:'N\'Guessan Rose'},
+  {id:5, first:'Marie', last:'Kra', matricule:'ELS-25-0056', classe:'4ème B', status:'Actif', parent:'Kra Jean'},
+  {id:6, first:'Ismaël', last:'Traoré', matricule:'ELS-25-0033', classe:'3ème A', status:'Suspendu', parent:'Traoré Fanta'},
+  {id:7, first:'Grace', last:'Yao', matricule:'ELS-25-0201', classe:'6ème A', status:'Actif', parent:'Yao Paul'},
+  {id:8, first:'David', last:'Koffi', matricule:'ELS-25-0167', classe:'4ème B', status:'Actif', parent:'Koffi Elise'},
+  {id:9, first:'Ruth', last:'Bamba', matricule:'ELS-25-0189', classe:'3ème A', status:'Actif', parent:'Bamba Idriss'}
+];
+
+const ACTIVITIES = [
+  {icon:'clipboard', text:"Nouvelle inscription — Konan Aya Grace (6ème A)", time:"il y a 12 min"},
+  {icon:'check-square', text:"Appel enregistré — 4ème B, Mathématiques", time:"il y a 40 min"},
+  {icon:'book', text:"Notes saisies — Devoir surveillé n°2, 3ème A", time:"il y a 1 h"},
+  {icon:'calendar', text:"Salle modifiée — Physique-Chimie déplacée en salle 12", time:"il y a 2 h"},
+  {icon:'user', text:"Nouveau compte enseignant créé — M. Bakayoko", time:"hier, 17:20"}
+];
+
+const TEACHER_CLASSES_TODAY = [
+  {time:'08h00–09h00', subject:'Mathématiques', classe:'4ème B', room:'Salle 12', status:'Terminé'},
+  {time:'10h00–11h00', subject:'Mathématiques', classe:'3ème A', room:'Salle 12', status:'En cours'},
+  {time:'11h15–12h15', subject:'Mathématiques', classe:'6ème A', room:'Salle 08', status:'À venir'},
+  {time:'14h00–15h00', subject:'Soutien', classe:'4ème B', room:'Salle 12', status:'À venir'}
+];
+
+const DAYS = ['Lun','Mar','Mer','Jeu','Ven','Sam'];
+const TT_SUBJECT_COLOR = { 'Mathématiques':'ink', 'Physique-Chimie':'green', 'Français':'amber', 'Anglais':'info', 'SVT':'success', 'Histoire-Géo':'ink' };
+const TT_SLOTS = ['08h–09h','09h–10h','10h–11h','11h–12h','14h–15h','15h–16h'];
+const TIMETABLE = [
+  {day:0, slot:0, subject:'Mathématiques', teacher:'Mme Aïcha D.', room:'Salle 12'},
+  {day:0, slot:2, subject:'Français', teacher:'M. Bakayoko', room:'Salle 09'},
+  {day:1, slot:1, subject:'Physique-Chimie', teacher:'M. Coulibaly', room:'Labo 1', exception:'Salle modifiée'},
+  {day:1, slot:3, subject:'Anglais', teacher:'Mme Touré', room:'Salle 09'},
+  {day:2, slot:0, subject:'SVT', teacher:'M. Kouadio', room:'Labo 2'},
+  {day:2, slot:2, subject:'Mathématiques', teacher:'Mme Aïcha D.', room:'Salle 12'},
+  {day:3, slot:1, subject:'Histoire-Géo', teacher:'Mme Kacou', room:'Salle 09', exception:'Cours annulé'},
+  {day:3, slot:4, subject:'Français', teacher:'M. Bakayoko', room:'Salle 09'},
+  {day:4, slot:0, subject:'Anglais', teacher:'Mme Touré', room:'Salle 09'},
+  {day:4, slot:2, subject:'Mathématiques', teacher:'Mme Aïcha D.', room:'Salle 12'},
+  {day:5, slot:0, subject:'SVT', teacher:'M. Kouadio', room:'Labo 2'}
+];
+
+const INSCRIPTIONS = [
+  {id:1, name:'Konan Aya Grace', classe:'6ème A', date:'08/02', docs:3, status:'En attente'},
+  {id:2, name:'Diomandé Karim', classe:'2nde C', date:'07/02', docs:2, status:'En attente'},
+  {id:3, name:'Ouattara Léa', classe:'6ème A', date:'05/02', docs:4, status:'Validée'},
+  {id:4, name:'Silué Ibrahim', classe:'3ème B', date:'04/02', docs:1, status:'En attente'},
+  {id:5, name:'Adjoua Nina', classe:'2nde C', date:'02/02', docs:4, status:'Validée'},
+  {id:6, name:'Koné Moussa', classe:'6ème A', date:'01/02', docs:2, status:'Rejetée'}
+];
+
+/* Génération d'un effectif de démonstration pour l'appel (24 élèves) */
+const FIRST_NAMES = ['Aya','Yves','Fatou','Junior','Marie','Ismaël','Grace','David','Ruth','Kader','Aminata','Serge','Adjoua','Moussa','Léa','Ibrahim','Nina','Karim','Rose','Paul','Elise','Fanta','Oumar','Alice'];
+const LAST_NAMES = ['Konan','Kouassi','Diabaté','N\'Guessan','Kra','Traoré','Yao','Koffi','Bamba','Silué','Ouattara','Koné','Diomandé','Coulibaly','Kouadio','Kacou','Touré','Bakayoko'];
+function buildAttendanceRoster(n){ const out=[]; for(let i=0;i<n;i++){ out.push({id:'a'+i, first:FIRST_NAMES[i%FIRST_NAMES.length], last:LAST_NAMES[(i*3+1)%LAST_NAMES.length], matricule:'ELS-25-'+(1000+i), status:'present'}); } return out; }
+let ATT_STUDENTS = buildAttendanceRoster(24);
+
+/* ============================================================
+   NAVIGATION — structure conforme à use-app-navigation.tsx (§6.1 / §6.2)
+   ============================================================ */
+const ADMIN_NAV = [
+  {group:null, items:[ {label:'Tableau de bord', icon:'home', view:'admin-dashboard'} ]},
+  {group:'Gestion des personnes', items:[
+    {label:'Élèves', icon:'users', view:'students'},
+    {label:'Parents', icon:'user', view:'placeholder', title:'Parents'},
+    {label:'Enseignants', icon:'user', view:'placeholder', title:'Enseignants'}
+  ]},
+  {group:'Année académique', items:[
+    {label:'Années scolaires', icon:'calendar', view:'placeholder', title:'Années scolaires'},
+    {label:'Inscriptions', icon:'clipboard', view:'inscriptions'},
+    {label:'Salles de classe', icon:'building', view:'placeholder', title:'Salles de classe'},
+    {label:'Emploi du temps', icon:'calendar', view:'timetable'},
+    {label:'Affectations enseignants', icon:'users', view:'placeholder', title:'Affectations enseignants'}
+  ]},
+  {group:'Pédagogie', items:[
+    {label:'Classes', icon:'layers', view:'placeholder', title:'Classes'},
+    {label:'Matières', icon:'book', view:'placeholder', title:'Matières'},
+    {label:'Affectations', icon:'clipboard', view:'placeholder', title:'Affectations matières'},
+    {label:'Coefficients', icon:'settings', view:'placeholder', title:'Coefficients'},
+    {label:'Moyennes complètes', icon:'book', view:'placeholder', title:'Moyennes complètes'},
+    {label:'Notes par matière', icon:'book', view:'placeholder', title:'Notes par matière'}
+  ]},
+  {group:null, items:[ {label:'Utilisateurs', icon:'user', view:'placeholder', title:'Utilisateurs'} ]}
+];
+const TEACHER_NAV = [
+  {group:null, items:[ {label:'Tableau de bord', icon:'home', view:'teacher-dashboard'} ]},
+  {group:'Mon planning', items:[
+    {label:'Mes classes', icon:'layers', view:'placeholder', title:'Mes classes'},
+    {label:'Mon emploi du temps', icon:'calendar', view:'timetable'},
+    {label:'Liste de présence', icon:'check-square', view:'attendance'}
+  ]},
+  {group:'Évaluations', items:[
+    {label:"Types d'évaluation", icon:'settings', view:'placeholder', title:"Types d'évaluation"},
+    {label:'Saisie des notes', icon:'book', view:'grades'},
+    {label:'Moyennes par trimestre', icon:'book', view:'placeholder', title:'Moyennes par trimestre'}
+  ]}
+];
+const ADMIN_TABBAR = [
+  {label:'Accueil', icon:'home', view:'admin-dashboard'},
+  {label:'Élèves', icon:'users', view:'students'},
+  {label:'Planning', icon:'calendar', view:'timetable'},
+  {label:'Inscriptions', icon:'clipboard', view:'inscriptions'},
+  {label:'Menu', icon:'menu', action:'open-sidebar'}
+];
+const TEACHER_TABBAR = [
+  {label:'Accueil', icon:'home', view:'teacher-dashboard'},
+  {label:'Présence', icon:'check-square', view:'attendance'},
+  {label:'Notes', icon:'book', view:'grades'},
+  {label:'Planning', icon:'calendar', view:'timetable'},
+  {label:'Menu', icon:'menu', action:'open-sidebar'}
+];
+const VIEW_META = {
+  'admin-dashboard':{title:'Tableau de bord', sub:'Année scolaire 2025–2026 · 2nd trimestre'},
+  'teacher-dashboard':{title:'Tableau de bord', sub:'Mardi 10 février'},
+  'students':{title:'Élèves', sub:'Gestion des personnes'},
+  'timetable':{title:'Emploi du temps', sub:'Semaine du 9 au 14 février'},
+  'grades':{title:'Saisie des notes', sub:'Évaluations · 2nd trimestre'},
+  'attendance':{title:'Prise de présence', sub:'Mon planning'},
+  'inscriptions':{title:'Inscriptions', sub:'Année académique 2026–2027'}
+};
+
+/* ============================================================
+   ÉTAT GLOBAL
+   ============================================================ */
+const state = { role:'admin', view:'admin-dashboard', studentSearch:'', studentClasseFilter:'all', ttScope:'classe', grades:{2:'14.5', 5:'17', 8:'9'} };
+let saveIndicatorTimer=null;
+
+function accentVars(name){
+  const map={ ink:['--ink-600','--ink-50'], green:['--green-600','--green-50'], amber:['--amber-600','--amber-50'], info:['--info-600','--info-50'], success:['--success-600','--success-50'] };
+  const pair = map[name]||map.ink;
+  return `--accent:var(${pair[0]});--accent-soft:var(${pair[1]});`;
+}
+
+/* ============================================================
+   RENDU — TABLEAU DE BORD ADMIN
+   ============================================================ */
+const ADMIN_KPIS = [
+  {label:'Élèves inscrits', value:'142', trend:'+4 ce mois-ci', dir:'up', icon:'users', accent:'ink'},
+  {label:'Enseignants actifs', value:'18', trend:'Effectif stable', dir:null, icon:'user', accent:'green'},
+  {label:'Classes ouvertes', value:'9', trend:'+1 cette année', dir:'up', icon:'layers', accent:'amber'},
+  {label:'Taux de présence', value:'94%', trend:'-2 pts vs sem. dernière', dir:'down', icon:'check-square', accent:'info'}
+];
+function renderKPIs(){
+  document.getElementById('adminKpiGrid').innerHTML = ADMIN_KPIS.map(k=>`
+    <div class="card card-pad stat-card card-accent" style="${accentVars(k.accent)}">
+      <div class="stat-top">
+        <span class="stat-icon">${icon(k.icon)}</span>
+        ${k.dir?`<span class="stat-trend ${k.dir}">${icon(k.dir==='up'?'trend-up':'trend-down')}</span>`:''}
+      </div>
+      <span class="stat-value">${k.value}</span>
+      <span class="stat-label">${k.label}</span>
+      <span class="text-tertiary" style="font-size:.72rem;">${k.trend}</span>
+    </div>`).join('');
+}
+
+const REPARTITION = [{label:'6ème A',value:32},{label:'4ème B',value:28},{label:'3ème A',value:30},{label:'Autres classes',value:52}];
+function renderRepartition(){
+  const max = Math.max(...REPARTITION.map(r=>r.value));
+  document.getElementById('repartitionChart').innerHTML = REPARTITION.map(r=>`
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:.78rem;margin-bottom:5px;"><span>${r.label}</span><span class="mono text-secondary">${r.value}</span></div>
+      <div class="progress-track"><div class="progress-fill" style="width:${(r.value/max*100).toFixed(0)}%"></div></div>
+    </div>`).join('');
+}
+
+function renderActivityFeed(){
+  document.getElementById('activityFeed').innerHTML = ACTIVITIES.map((a,i)=>`
+    <div style="display:flex;gap:12px;align-items:flex-start;padding:10px 2px;${i<ACTIVITIES.length-1?'border-bottom:1px solid var(--border);':''}">
+      <span style="width:34px;height:34px;border-radius:10px;background:var(--role-accent-soft);color:var(--role-accent-700);display:flex;align-items:center;justify-content:center;flex:none;">${icon(a.icon)}</span>
+      <div style="flex:1;min-width:0;"><p style="font-size:.85rem;font-weight:500;">${a.text}</p><span class="text-tertiary" style="font-size:.72rem;">${a.time}</span></div>
+    </div>`).join('');
+}
+
+/* ============================================================
+   RENDU — TABLEAU DE BORD ENSEIGNANT
+   ============================================================ */
+const STATUS_BADGE = {'Terminé':'badge-neutral','En cours':'badge-success','À venir':'badge-info'};
+function renderTeacherClasses(){
+  document.getElementById('teacherClassesToday').innerHTML = TEACHER_CLASSES_TODAY.map(c=>{
+    const colorKey = TT_SUBJECT_COLOR[c.subject]||'green';
+    return `<div class="card card-pad card-hover card-accent" style="${accentVars(colorKey)}">
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        <span class="mono" style="font-size:.8rem;font-weight:700;color:var(--text-secondary);min-width:104px;">${c.time}</span>
+        <div style="flex:1;min-width:140px;"><strong style="display:block;font-size:.92rem;">${c.subject} — ${c.classe}</strong><span class="text-tertiary" style="font-size:.78rem;">${c.room}</span></div>
+        <span class="badge ${STATUS_BADGE[c.status]}">${c.status}</span>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-secondary btn-sm" data-goto="attendance" title="Faire l'appel">${icon('check-square')}</button>
+          <button class="btn btn-secondary btn-sm" data-goto="grades" title="Saisir des notes">${icon('book')}</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('teacherCourseCount').textContent = TEACHER_CLASSES_TODAY.length+' cours';
+}
+
+/* ============================================================
+   RENDU — ÉLÈVES
+   ============================================================ */
+function matchesStudent(s){
+  const term = (state.studentSearch||'').toLowerCase().trim();
+  const matchesTerm = !term || (s.first+' '+s.last).toLowerCase().includes(term) || s.matricule.toLowerCase().includes(term);
+  const matchesClasse = state.studentClasseFilter==='all' || s.classe===state.studentClasseFilter;
+  return matchesTerm && matchesClasse;
+}
+function studentStatusBadge(status){ return status==='Actif' ? '<span class="badge badge-success">Actif</span>' : '<span class="badge badge-warning">Suspendu</span>'; }
+function renderStudents(){
+  const filtered = STUDENTS.filter(matchesStudent);
+  const grid = document.getElementById('studentsGrid');
+  const empty = document.getElementById('studentsEmpty');
+  const active = !!(state.studentSearch || state.studentClasseFilter!=='all');
+  document.getElementById('studentsLede').textContent = active ? `${filtered.length} résultat(s) trouvé(s)` : `142 élèves inscrits sur l'année 2025–2026`;
+  if(filtered.length===0){ grid.style.display='none'; empty.style.display='flex'; return; }
+  empty.style.display='none'; grid.style.display='grid';
+  grid.innerHTML = filtered.map(s=>`
+    <div class="card entity-card card-hover card-accent" style="${accentVars(colorKeyForClasse(s.classe))}" data-student-id="${s.id}">
+      <div class="entity-card-top">
+        <span class="avatar" style="background:${colorFor(s.last)}">${initials(s.first,s.last)}</span>
+        <div class="entity-card-meta"><strong>${s.first} ${s.last}</strong><span class="sub">${s.classe} · Parent : ${s.parent}</span></div>
+      </div>
+      <div class="entity-card-foot">
+        <span class="id-tag">${s.matricule}</span>
+        ${studentStatusBadge(s.status)}
+      </div>
+    </div>`).join('');
+}
+function colorKeyForClasse(classe){ return classe==='6ème A'?'ink':(classe==='4ème B'?'green':'amber'); }
+
+/* ============================================================
+   RENDU — EMPLOI DU TEMPS (grille desktop/tablette + agenda mobile)
+   ============================================================ */
+const FULL_DAY_NAMES = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+function ttMatchesScope(entry){
+  if(state.role==='teacher') return entry.teacher==='Mme Aïcha D.';
+  if(state.ttScope==='teacher') return entry.teacher==='Mme Aïcha D.';
+  return true;
+}
+function renderTimetable(){
+  const isTeacher = state.role==='teacher';
+  document.getElementById('ttTitle').textContent = isTeacher ? 'Mon emploi du temps' : 'Emploi du temps';
+  document.getElementById('ttAdminSelectors').style.display = isTeacher ? 'none' : 'flex';
+
+  let head = '<div class="tt-head"></div>' + DAYS.map(d=>`<div class="tt-head">${d}</div>`).join('');
+  let body = '';
+  TT_SLOTS.forEach((slotLabel, slotIdx)=>{
+    body += `<div class="tt-time">${slotLabel}</div>`;
+    for(let dayIdx=0; dayIdx<6; dayIdx++){
+      const entry = TIMETABLE.find(t=>t.day===dayIdx && t.slot===slotIdx && ttMatchesScope(t));
+      if(entry){
+        const colorKey = TT_SUBJECT_COLOR[entry.subject]||'ink';
+        const isExc = !!entry.exception;
+        body += `<div class="tt-cell"><div class="tt-chip ${isExc?'exception':''}" style="${accentVars(colorKey)};--accent-strong:var(--${colorKey}-700, var(--ink-700));">
+          <strong>${entry.subject}</strong>
+          <span>${isTeacher ? entry.room : entry.teacher}</span>
+          ${isExc?`<span style="font-weight:700;">${entry.exception}</span>`:''}
+        </div></div>`;
+      } else { body += '<div class="tt-cell"></div>'; }
+    }
+  });
+  document.getElementById('ttGrid').innerHTML = head + body;
+
+  let agenda = '';
+  for(let dayIdx=0; dayIdx<6; dayIdx++){
+    const items = TIMETABLE.filter(t=>t.day===dayIdx && ttMatchesScope(t)).sort((a,b)=>a.slot-b.slot);
+    if(!items.length) continue;
+    agenda += `<div class="agenda-day-label">${FULL_DAY_NAMES[dayIdx]}</div>`;
+    items.forEach(entry=>{
+      const colorKey = TT_SUBJECT_COLOR[entry.subject]||'ink';
+      agenda += `<div class="agenda-item" style="background:var(--bg-elevated);border:1px solid var(--border);${accentVars(colorKey)}">
+        <span class="agenda-time">${TT_SLOTS[entry.slot].split('–')[0]}</span>
+        <span class="agenda-bar" style="background:var(--accent);"></span>
+        <div class="agenda-info" style="flex:1;"><strong>${entry.subject}</strong><span>${isTeacher?entry.room:entry.teacher+' · '+entry.room}</span></div>
+        ${entry.exception?`<span class="badge badge-danger">${entry.exception}</span>`:''}
+      </div>`;
+    });
+  }
+  document.getElementById('ttAgenda').innerHTML = agenda;
+}
+
+/* ============================================================
+   RENDU — SAISIE DES NOTES
+   ============================================================ */
+function currentGradeClasse(){ return document.getElementById('gradeClasseSelect').value; }
+function renderGradeRows(){
+  const classe = currentGradeClasse();
+  const list = STUDENTS.filter(s=>s.classe===classe);
+  document.getElementById('gradeRows').innerHTML = list.map((s,i)=>{
+    const val = state.grades[s.id] ?? '';
+    return `<div class="card grade-row card-hover">
+      <span class="rank mono">${i+1}</span>
+      <div class="who">
+        <span class="avatar avatar-sm" style="background:${colorFor(s.last)}">${initials(s.first,s.last)}</span>
+        <div><strong>${s.first} ${s.last}</strong><span>${s.matricule}</span></div>
+      </div>
+      <div class="grade-input-wrap">
+        <input type="number" min="0" max="20" step="0.5" class="input grade-input ${val!==''?'filled':''}" data-student-id="${s.id}" value="${val}" placeholder="—">
+        <span class="text-tertiary" style="font-size:.72rem;">/20</span>
+      </div>
+      <span class="grade-avg mono">${val!==''?val:'—'}</span>
+    </div>`;
+  }).join('');
+  updateGradeStats();
+}
+function updateGradeStats(){
+  const classe = currentGradeClasse();
+  const list = STUDENTS.filter(s=>s.classe===classe);
+  const values = list.map(s=>state.grades[s.id]).filter(v=>v!==undefined && v!=='').map(Number);
+  document.getElementById('gradeCompletion').textContent = `${values.length}/${list.length}`;
+  document.getElementById('classAvg').textContent = values.length ? (values.reduce((a,b)=>a+b,0)/values.length).toFixed(1) : '—';
+}
+function showSaveIndicator(){
+  const el = document.getElementById('saveIndicator');
+  el.classList.add('show');
+  clearTimeout(saveIndicatorTimer);
+  saveIndicatorTimer = setTimeout(()=>el.classList.remove('show'), 1600);
+}
+function renderBulletinPreview(){
+  const classe = currentGradeClasse();
+  const student = STUDENTS.find(s=>s.classe===classe) || STUDENTS[0];
+  const rows = [
+    {subject:'Mathématiques', coef:4, note:15.5}, {subject:'Français', coef:3, note:12},
+    {subject:'Physique-Chimie', coef:3, note:14}, {subject:'Anglais', coef:2, note:16},
+    {subject:'SVT', coef:2, note:13.5}, {subject:'Histoire-Géographie', coef:2, note:11}
+  ];
+  const totalCoef = rows.reduce((a,r)=>a+r.coef,0);
+  const totalPts = rows.reduce((a,r)=>a+r.coef*r.note,0);
+  const avg = (totalPts/totalCoef).toFixed(2);
+  const rowsHtml = rows.map(r=>`<tr><td style="padding:8px 6px;">${r.subject}</td><td class="mono" style="text-align:center;padding:8px 6px;">${r.coef}</td><td class="mono" style="text-align:center;padding:8px 6px;font-weight:700;">${r.note.toFixed(1)}</td></tr>`).join('');
+  document.getElementById('bulletinBody').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
+      <div><strong style="display:block;font-size:1rem;">${student.first} ${student.last}</strong><span class="text-tertiary mono" style="font-size:.78rem;">${student.matricule} · ${student.classe}</span></div>
+      <span class="badge badge-role">2nd trimestre</span>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:.86rem;">
+      <thead><tr style="border-bottom:2px solid var(--border);"><th style="text-align:left;padding:8px 6px;">Matière</th><th style="padding:8px 6px;">Coef.</th><th style="padding:8px 6px;">Note /20</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+    <div class="divider"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span class="text-secondary" style="font-size:.85rem;">Moyenne générale pondérée</span>
+      <span class="mono" style="font-size:1.4rem;font-weight:700;">${avg}<span style="font-size:.8rem;color:var(--text-tertiary);">/20</span></span>
+    </div>
+    <div style="margin-top:16px;">
+      <button class="btn btn-secondary btn-sm">${icon('download')} Exporter en PDF</button>
+    </div>`;
+}
+
+/* ============================================================
+   RENDU — PRISE DE PRÉSENCE
+   ============================================================ */
+function renderAttendance(){
+  document.getElementById('attendanceGrid').innerHTML = ATT_STUDENTS.map(s=>`
+    <div class="card att-card ${s.status}" data-att-id="${s.id}">
+      <span class="avatar avatar-sm" style="background:${colorFor(s.last)}">${initials(s.first,s.last)}</span>
+      <div class="att-card-name"><strong>${s.first} ${s.last}</strong><span>${s.matricule}</span></div>
+      <div class="att-actions">
+        <button class="att-btn present ${s.status==='present'?'on':''}" data-att-status="present" data-att-id="${s.id}" title="Présent">${icon('check')}</button>
+        <button class="att-btn late ${s.status==='late'?'on':''}" data-att-status="late" data-att-id="${s.id}" title="Retard">${icon('clock')}</button>
+        <button class="att-btn absent ${s.status==='absent'?'on':''}" data-att-status="absent" data-att-id="${s.id}" title="Absent">${icon('x')}</button>
+      </div>
+    </div>`).join('');
+  updateAttendanceCounts();
+}
+function updateAttendanceCounts(){
+  const present = ATT_STUDENTS.filter(s=>s.status==='present').length;
+  const late = ATT_STUDENTS.filter(s=>s.status==='late').length;
+  const absent = ATT_STUDENTS.filter(s=>s.status==='absent').length;
+  document.getElementById('countPresent').textContent = present;
+  document.getElementById('countLate').textContent = late;
+  document.getElementById('countAbsent').textContent = absent;
+}
+
+/* ============================================================
+   RENDU — INSCRIPTIONS (kanban par statut)
+   ============================================================ */
+const INSC_STATUSES = ['En attente','Validée','Rejetée'];
+const INSC_STYLE = {
+  'En attente':{bg:'var(--amber-50)', fg:'var(--amber-700)'},
+  'Validée':{bg:'var(--success-50)', fg:'var(--success-600)'},
+  'Rejetée':{bg:'var(--danger-50)', fg:'var(--danger-600)'}
+};
+function renderKanban(){
+  document.getElementById('inscriptionsKanban').innerHTML = INSC_STATUSES.map(st=>{
+    const items = INSCRIPTIONS.filter(i=>i.status===st);
+    const style = INSC_STYLE[st];
+    const cards = items.length ? items.map(i=>`
+      <div class="card insc-card card-hover card-accent" style="--accent:${style.fg};">
+        <div class="insc-card-top"><strong>${i.name}</strong></div>
+        <div class="meta-row">${icon('layers')}<span>${i.classe}</span></div>
+        <div class="meta-row">${icon('calendar')}<span>Reçue le ${i.date}</span></div>
+        <div class="meta-row">${icon('clipboard')}<span>${i.docs} pièce(s) jointe(s)</span></div>
+      </div>`).join('') : `<div class="insc-empty-col">Aucune inscription ${st.toLowerCase()}</div>`;
+    return `<div>
+      <div class="kanban-col-head"><span class="badge-dot-i" style="background:${style.fg};display:inline-block;width:8px;height:8px;border-radius:99px;"></span>${st}<span class="n">${items.length}</span></div>
+      <div class="kanban-cards">${cards}</div>
+    </div>`;
+  }).join('');
+}
+
+/* ============================================================
+   TIROIR FICHE ÉLÈVE
+   ============================================================ */
+function openStudentDrawer(id){
+  const s = STUDENTS.find(x=>x.id==id); if(!s) return;
+  document.getElementById('drawerAvatar').textContent = initials(s.first,s.last);
+  document.getElementById('drawerAvatar').style.background = colorFor(s.last);
+  document.getElementById('drawerName').textContent = s.first+' '+s.last;
+  document.getElementById('drawerMatricule').textContent = s.matricule;
+  document.getElementById('drawerClasse').textContent = s.classe;
+  document.getElementById('studentDrawer').classList.add('open');
+  document.getElementById('scrim').classList.add('open');
+}
+function closeDrawer(){ document.getElementById('studentDrawer').classList.remove('open'); document.getElementById('scrim').classList.remove('open'); }
+
+/* ============================================================
+   TOASTS
+   ============================================================ */
+function showToast(type, message){
+  const stack = document.getElementById('toastStack');
+  const el = document.createElement('div');
+  el.className = 'toast '+type;
+  const iconName = type==='success'?'check':(type==='warning'?'alert-triangle':'bell');
+  el.innerHTML = `<span class="toast-icon">${icon(iconName)}</span><span>${message}</span>`;
+  stack.appendChild(el);
+  setTimeout(()=>{ el.classList.add('leaving'); setTimeout(()=>el.remove(),260); }, 2800);
+}
+
+/* ============================================================
+   NAVIGATION — rendu sidebar / barre d'onglets + changement de vue
+   ============================================================ */
+function renderNav(){
+  const navData = state.role==='admin' ? ADMIN_NAV : TEACHER_NAV;
+  document.getElementById('navList').innerHTML = navData.map(section=>{
+    const items = section.items.map(it=>`
+      <button class="nav-item" data-goto="${it.view}" data-title="${it.title||it.label}">
+        ${icon(it.icon)}<span class="nav-text">${it.label}</span>
+      </button>`).join('');
+    return (section.group?`<div class="nav-group-label">${section.group}</div>`:'') + items;
+  }).join('');
+  markActiveNav();
+}
+function renderTabbar(){
+  const data = state.role==='admin' ? ADMIN_TABBAR : TEACHER_TABBAR;
+  document.getElementById('tabbar').innerHTML = data.map(it => it.action
+    ? `<button data-action="${it.action}">${icon(it.icon)}<span>${it.label}</span></button>`
+    : `<button data-goto="${it.view}">${icon(it.icon)}<span>${it.label}</span></button>`
+  ).join('');
+  markActiveNav();
+}
+function markActiveNav(){
+  document.querySelectorAll('#navList .nav-item, #tabbar button[data-goto]').forEach(n=>{
+    n.classList.toggle('active', n.dataset.goto===state.view);
+  });
+}
+
+function simulateSkeleton(skelId, gridId, renderFn, delay){
+  const skel=document.getElementById(skelId), grid=document.getElementById(gridId);
+  skel.style.display='grid'; grid.style.display='none';
+  setTimeout(()=>{ skel.style.display='none'; renderFn(); }, delay||420);
+}
+
+function switchView(view, opts){
+  opts = opts||{};
+  if(!view) return;
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  const target = document.querySelector('.view[data-view="'+view+'"]');
+  if(target) target.classList.add('active');
+  state.view = view;
+  markActiveNav();
+
+  const meta = VIEW_META[view] || {title: opts.title || 'Module', sub:'Module non détaillé dans les maquettes prioritaires'};
+  document.getElementById('pageTitle').textContent = view==='placeholder' ? (opts.title||'Module') : meta.title;
+  document.getElementById('pageSub').textContent = view==='placeholder' ? 'Module non détaillé dans les maquettes prioritaires' : meta.sub;
+  if(view==='placeholder'){ document.getElementById('placeholderTitle').textContent = opts.title || 'Module'; }
+
+  closeMobileSidebar();
+  closeDropdowns();
+
+  if(view==='students'){ simulateSkeleton('studentsSkeleton','studentsGrid', renderStudents); }
+  else if(view==='timetable'){ renderTimetable(); }
+  else if(view==='grades'){ renderGradeRows(); }
+  else if(view==='attendance'){ renderAttendance(); }
+  else if(view==='inscriptions'){ renderKanban(); }
+}
+
+function setRole(role){
+  state.role = role;
+  document.documentElement.setAttribute('data-role', role);
+  document.getElementById('roleBtnAdmin').classList.toggle('active', role==='admin');
+  document.getElementById('roleBtnTeacher').classList.toggle('active', role==='teacher');
+  document.getElementById('userRoleLabel').textContent = role==='admin' ? 'Administrateur' : 'Enseignante';
+  document.getElementById('userName').textContent = role==='admin' ? 'Mickael K.' : 'Aïcha Diarrassouba';
+  const ini = role==='admin' ? 'MK' : 'AD';
+  document.querySelectorAll('#userAvatar, .avatar-btn .avatar').forEach(a=>a.textContent=ini);
+  renderNav();
+  renderTabbar();
+  switchView(role==='admin' ? 'admin-dashboard' : 'teacher-dashboard');
+}
+
+function toggleTheme(){
+  const cur = document.documentElement.getAttribute('data-theme');
+  const next = cur==='dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  document.getElementById('themeToggle').innerHTML = icon(next==='dark' ? 'sun' : 'moon');
+}
+
+function closeDropdowns(){ document.querySelectorAll('.dropdown.open').forEach(d=>d.classList.remove('open')); }
+function openMobileSidebar(){ document.getElementById('sidebar').classList.add('open'); document.getElementById('sidebarScrim').classList.add('open'); }
+function closeMobileSidebar(){ document.getElementById('sidebar').classList.remove('open'); document.getElementById('sidebarScrim').classList.remove('open'); }
+
+/* ============================================================
+   INITIALISATION & ÉCOUTEURS
+   ============================================================ */
+document.addEventListener('DOMContentLoaded', ()=>{
+  paintIcons(document);
+  renderNav(); renderTabbar();
+  renderKPIs(); renderRepartition(); renderActivityFeed(); renderTeacherClasses();
+  renderStudents(); renderTimetable(); renderGradeRows(); renderAttendance(); renderKanban();
+
+  /* Rôle & thème */
+  document.getElementById('roleBtnAdmin').addEventListener('click', ()=>setRole('admin'));
+  document.getElementById('roleBtnTeacher').addEventListener('click', ()=>setRole('teacher'));
+  document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+
+  /* Sidebar mobile */
+  document.getElementById('hamburgerBtn').addEventListener('click', openMobileSidebar);
+  document.getElementById('sidebarScrim').addEventListener('click', closeMobileSidebar);
+
+  /* Dropdowns */
+  document.getElementById('notifBtn').addEventListener('click', e=>{ e.stopPropagation(); const d=document.getElementById('notifDropdown'); const open=!d.classList.contains('open'); closeDropdowns(); if(open) d.classList.add('open'); });
+  document.getElementById('avatarMenuBtn').addEventListener('click', e=>{ e.stopPropagation(); const d=document.getElementById('avatarDropdown'); const open=!d.classList.contains('open'); closeDropdowns(); if(open) d.classList.add('open'); });
+  document.addEventListener('click', ()=>closeDropdowns());
+
+  /* Tiroir élève */
+  document.getElementById('drawerCloseBtn').addEventListener('click', closeDrawer);
+  document.getElementById('scrim').addEventListener('click', ()=>{ closeDrawer(); document.getElementById('bulletinModal').classList.remove('open'); document.getElementById('inscriptionModal').classList.remove('open'); });
+  document.querySelectorAll('[data-drawer-tab]').forEach(tab=>{
+    tab.addEventListener('click', ()=>{
+      document.querySelectorAll('[data-drawer-tab]').forEach(t=>t.classList.remove('active'));
+      tab.classList.add('active');
+      ['profil','parents','notes','presences'].forEach(k=>{
+        document.getElementById('drawerPanel'+k.charAt(0).toUpperCase()+k.slice(1)).style.display = (k===tab.dataset.drawerTab) ? 'block' : 'none';
+      });
+    });
+  });
+
+  /* Élèves : recherche, filtres, vue grille/liste */
+  document.getElementById('studentSearch').addEventListener('input', e=>{ state.studentSearch = e.target.value; renderStudents(); });
+  document.querySelectorAll('[data-classe-filter]').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      document.querySelectorAll('[data-classe-filter]').forEach(c=>c.classList.remove('active'));
+      chip.classList.add('active');
+      state.studentClasseFilter = chip.dataset.classeFilter;
+      renderStudents();
+    });
+  });
+  document.getElementById('resetStudentFilters').addEventListener('click', ()=>{
+    state.studentSearch=''; state.studentClasseFilter='all';
+    document.getElementById('studentSearch').value='';
+    document.querySelectorAll('[data-classe-filter]').forEach(c=>c.classList.remove('active'));
+    document.querySelector('[data-classe-filter="all"]').classList.add('active');
+    renderStudents();
+  });
+  document.getElementById('studentsGridBtn').addEventListener('click', ()=>{
+    document.getElementById('studentsGridBtn').classList.add('active');
+    document.getElementById('studentsListBtn').classList.remove('active');
+    document.getElementById('studentsGrid').classList.remove('list-mode');
+  });
+  document.getElementById('studentsListBtn').addEventListener('click', ()=>{
+    document.getElementById('studentsListBtn').classList.add('active');
+    document.getElementById('studentsGridBtn').classList.remove('active');
+    document.getElementById('studentsGrid').classList.add('list-mode');
+  });
+
+  /* Emploi du temps */
+  document.querySelectorAll('[data-tt-scope]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('[data-tt-scope]').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      state.ttScope = btn.dataset.ttScope;
+      renderTimetable();
+    });
+  });
+
+  /* Saisie des notes */
+  document.getElementById('gradeClasseSelect').addEventListener('change', renderGradeRows);
+  document.getElementById('gradeRows').addEventListener('input', e=>{
+    if(!e.target.matches('.grade-input')) return;
+    const id = +e.target.dataset.studentId;
+    const v = e.target.value;
+    state.grades[id] = v;
+    e.target.classList.toggle('filled', v!=='');
+    const row = e.target.closest('.grade-row');
+    row.querySelector('.grade-avg').textContent = v!==''? v : '—';
+    updateGradeStats();
+    showSaveIndicator();
+  });
+  document.getElementById('fillAllBtn').addEventListener('click', ()=>{
+    const classe = currentGradeClasse();
+    STUDENTS.filter(s=>s.classe===classe).forEach(s=>state.grades[s.id]='15');
+    renderGradeRows(); showSaveIndicator();
+  });
+  document.getElementById('saveGradesBtn').addEventListener('click', ()=>{ showToast('success','Notes enregistrées avec succès'); showSaveIndicator(); });
+  document.getElementById('previewBulletinBtn').addEventListener('click', ()=>{ renderBulletinPreview(); document.getElementById('bulletinModal').classList.add('open'); });
+  document.getElementById('closeBulletinBtn').addEventListener('click', ()=> document.getElementById('bulletinModal').classList.remove('open'));
+
+  /* Présence */
+  document.getElementById('attendanceGrid').addEventListener('click', e=>{
+    const btn = e.target.closest('[data-att-status]'); if(!btn) return;
+    const s = ATT_STUDENTS.find(x=>x.id===btn.dataset.attId); if(!s) return;
+    s.status = btn.dataset.attStatus;
+    const card = btn.closest('.att-card');
+    card.className = 'card att-card '+s.status;
+    card.querySelectorAll('.att-btn').forEach(b=>b.classList.remove('on'));
+    btn.classList.add('on');
+    updateAttendanceCounts();
+  });
+  document.getElementById('markAllPresentBtn').addEventListener('click', ()=>{ ATT_STUDENTS.forEach(s=>s.status='present'); renderAttendance(); });
+  document.getElementById('saveAttendanceBtn').addEventListener('click', ()=>{ showToast('success', 'Appel enregistré · '+ATT_STUDENTS.length+' élèves'); });
+
+  /* Inscriptions */
+  document.getElementById('newInscriptionBtn').addEventListener('click', ()=> document.getElementById('inscriptionModal').classList.add('open'));
+  document.getElementById('closeInscriptionBtn').addEventListener('click', ()=> document.getElementById('inscriptionModal').classList.remove('open'));
+  document.getElementById('closeInscriptionBtn2').addEventListener('click', ()=> document.getElementById('inscriptionModal').classList.remove('open'));
+  document.getElementById('submitInscriptionBtn').addEventListener('click', ()=>{ document.getElementById('inscriptionModal').classList.remove('open'); showToast('success','Inscription créée — en attente de validation'); });
+
+  /* Navigation générale : tout élément [data-goto] (menu, actions rapides, boutons de carte) */
+  document.addEventListener('click', e=>{
+    const goBtn = e.target.closest('[data-goto]');
+    if(goBtn){ switchView(goBtn.dataset.goto, {title: goBtn.dataset.title}); return; }
+    const actionBtn = e.target.closest('[data-action="open-sidebar"]');
+    if(actionBtn){ openMobileSidebar(); return; }
+    const studentCard = e.target.closest('[data-student-id]');
+    if(studentCard){ openStudentDrawer(studentCard.dataset.studentId); return; }
+  });
+});
+</script>
+</body>
+</html>

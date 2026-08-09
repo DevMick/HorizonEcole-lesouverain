@@ -1,0 +1,726 @@
+import { useState, useEffect } from 'react';
+import {
+  Button,
+  Select,
+  message,
+  Popconfirm,
+  Row,
+  Col,
+  Table,
+  Space,
+} from 'antd';
+import {
+  DeleteOutlined,
+  CalendarOutlined,
+  CheckOutlined,
+  CloseOutlined,
+} from '@ant-design/icons';
+import { Calendar } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '../lib/api';
+import { PageHeader } from '../components/ui/page-header';
+import { GlassCard } from '../components/ui/glass-card';
+import { EmptyState } from '../components/ui/empty-state';
+
+const DAYS_OF_WEEK = [
+  { value: 'MONDAY', label: 'Lundi' },
+  { value: 'TUESDAY', label: 'Mardi' },
+  { value: 'WEDNESDAY', label: 'Mercredi' },
+  { value: 'THURSDAY', label: 'Jeudi' },
+  { value: 'FRIDAY', label: 'Vendredi' },
+];
+
+const TIME_SLOTS = [
+  { start: '07:45', end: '08:35', label: '07:45 - 08:35' },
+  { start: '08:35', end: '09:25', label: '08:35 - 09:25' },
+  { start: '09:25', end: '10:15', label: '09:25 - 10:15' },
+  { start: '10:30', end: '11:20', label: '10:30 - 11:20' },
+  { start: '11:20', end: '12:10', label: '11:20 - 12:10' },
+  { start: '12:10', end: '13:15', label: '12:10 - 13:15', isSeparator: true },
+  { start: '13:15', end: '14:05', label: '13:15 - 14:05', isAfternoon: true },
+  { start: '14:05', end: '14:55', label: '14:05 - 14:55' },
+  { start: '14:55', end: '15:45', label: '14:55 - 15:45' },
+  { start: '15:45', end: '16:35', label: '15:45 - 16:35' },
+];
+
+export default function TimetablePage() {
+  const queryClient = useQueryClient();
+  const [academicYearFilter, setAcademicYearFilter] = useState<string>('');
+  const [classFilter, setClassFilter] = useState<string>('');
+  const [editingCell, setEditingCell] = useState<{ day: string; timeSlot: string } | null>(null);
+  const [quickEditData, setQuickEditData] = useState<{
+    subjectId?: string;
+    teacherId?: string;
+    classroomId?: string;
+  }>({});
+
+  // Fetch academic years
+  const { data: academicYearsData } = useQuery({
+    queryKey: ['academicYears'],
+    queryFn: async () => {
+      const response = await api.get('/academic-years');
+      return response.data.data;
+    },
+  });
+
+  // Fetch classes
+  const { data: classesData } = useQuery({
+    queryKey: ['school-classes'],
+    queryFn: async () => {
+      const response = await api.get('/school-classes');
+      return response.data.data;
+    },
+  });
+
+  // Fetch subjects
+  const { data: subjectsData } = useQuery({
+    queryKey: ['subjects'],
+    queryFn: async () => {
+      const response = await api.get('/subjects');
+      return response.data.data;
+    },
+  });
+
+  // Fetch teachers
+  const { data: _teachersData } = useQuery({
+    queryKey: ['teachers'],
+    queryFn: async () => {
+      const response = await api.get('/teachers?limit=1000');
+      return response.data.data?.data || response.data.data || [];
+    },
+  });
+
+  // Fetch classrooms
+  const { data: classroomsData } = useQuery({
+    queryKey: ['classrooms'],
+    queryFn: async () => {
+      const response = await api.get('/classrooms?limit=1000');
+      return response.data.data?.data || response.data.data || [];
+    },
+  });
+
+  // Fetch teacher assignments for the selected academic year
+  const { data: teacherAssignmentsData } = useQuery({
+    queryKey: ['class-assignments', academicYearFilter],
+    queryFn: async () => {
+      if (!academicYearFilter) return [];
+      const params = new URLSearchParams({
+        limit: '1000',
+      });
+      if (academicYearFilter) params.append('academicYearId', academicYearFilter);
+      
+      const response = await api.get(`/class-assignments/teachers?${params.toString()}`);
+      return response.data.data || [];
+    },
+    enabled: !!academicYearFilter,
+  });
+
+  // Fetch timetables
+  const { data: timetablesData, isLoading } = useQuery({
+    queryKey: ['timetables', academicYearFilter, classFilter],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (academicYearFilter) params.append('academicYearId', academicYearFilter);
+      if (classFilter) params.append('classId', classFilter);
+
+      const response = await api.get(`/timetables?${params.toString()}`);
+      return Array.isArray(response.data.data) ? response.data.data : [];
+    },
+    enabled: !!academicYearFilter && !!classFilter,
+  });
+
+  // Create timetable mutation
+  const createMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const response = await api.post('/timetables', data);
+      return response.data;
+    },
+    onSuccess: () => {
+      message.success('Cours ajouté avec succès !');
+      setEditingCell(null);
+      setQuickEditData({});
+      queryClient.invalidateQueries({ queryKey: ['timetables'] });
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.error || 'Erreur lors de l\'ajout du cours');
+    },
+  });
+
+  // Update timetable mutation
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const response = await api.patch(`/timetables/${id}`, data);
+      return response.data;
+    },
+    onSuccess: () => {
+      message.success('Cours modifié avec succès !');
+      setEditingCell(null);
+      setQuickEditData({});
+      queryClient.invalidateQueries({ queryKey: ['timetables'] });
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.error || 'Erreur lors de la modification du cours');
+    },
+  });
+
+  // Delete timetable mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await api.delete(`/timetables/${id}`);
+      return response.data;
+    },
+    onSuccess: () => {
+      message.success('Cours supprimé avec succès !');
+      queryClient.invalidateQueries({ queryKey: ['timetables'] });
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.error || 'Erreur lors de la suppression du cours');
+    },
+  });
+
+  const handleQuickSave = (day: string, record: any, existingTimetable?: any) => {
+    // Prevent multiple simultaneous requests
+    if (createMutation.isPending || updateMutation.isPending) {
+      return;
+    }
+
+    if (!academicYearFilter || !classFilter) {
+      message.warning('Veuillez sélectionner une année scolaire et une classe');
+      return;
+    }
+
+    if (!quickEditData.subjectId || !quickEditData.teacherId) {
+      message.warning('Veuillez remplir tous les champs');
+      return;
+    }
+
+    // Check if subject is EPS
+    const selectedSubject = subjectsData?.find((s: any) => s.id === quickEditData.subjectId);
+    const isEPS = selectedSubject?.code === 'EPS' || selectedSubject?.name?.toUpperCase().includes('EPS') || 
+                  selectedSubject?.name?.toUpperCase().includes('ÉDUCATION PHYSIQUE');
+
+    // For EPS, automatically select a classroom if not provided
+    let classroomId = quickEditData.classroomId;
+    if (isEPS && !classroomId && classroomsData && classroomsData.length > 0) {
+      // Select the first available classroom
+      classroomId = classroomsData[0].id;
+    }
+
+    // For non-EPS subjects, require classroom
+    if (!isEPS && !classroomId) {
+      message.warning('Veuillez sélectionner une salle');
+      return;
+    }
+
+    const data = {
+      academicYearId: academicYearFilter,
+      classId: classFilter,
+      dayOfWeek: day,
+      startTime: record.start,
+      endTime: record.end,
+      subjectId: quickEditData.subjectId,
+      teacherId: quickEditData.teacherId,
+      classroomId: classroomId,
+    };
+
+    if (existingTimetable) {
+      updateMutation.mutate({ id: existingTimetable.id, data });
+    } else {
+      createMutation.mutate(data);
+    }
+  };
+
+  const handleCellClick = (day: string, record: any, existingTimetable?: any) => {
+    if (record.isBreak || record.isSeparator) return;
+    
+    if (!academicYearFilter || !classFilter) {
+      message.warning('Veuillez sélectionner une année scolaire et une classe');
+      return;
+    }
+
+    setEditingCell({ day, timeSlot: record.time });
+    if (existingTimetable) {
+      setQuickEditData({
+        subjectId: existingTimetable.subject_id,
+        teacherId: existingTimetable.teacher_id,
+        classroomId: existingTimetable.classroom_id,
+      });
+    } else {
+      setQuickEditData({
+        subjectId: undefined,
+        teacherId: undefined,
+        classroomId: undefined,
+      });
+    }
+  };
+
+  const handleDelete = (id: string) => {
+    deleteMutation.mutate(id);
+  };
+
+  // Set default academic year to current year
+  useEffect(() => {
+    if (academicYearsData && !academicYearFilter) {
+      const currentYear = academicYearsData.find((year: any) => year.isCurrent);
+      if (currentYear) {
+        setAcademicYearFilter(currentYear.id);
+      } else if (academicYearsData.length > 0) {
+        // If no current year, use the first one
+        setAcademicYearFilter(academicYearsData[0].id);
+      }
+    }
+  }, [academicYearsData, academicYearFilter]);
+
+  // Automatically set classroom for EPS subject
+  useEffect(() => {
+    if (!quickEditData.subjectId || !classroomsData || classroomsData.length === 0 || quickEditData.classroomId) {
+      return;
+    }
+
+    const selectedSubject = subjectsData?.find((s: any) => s.id === quickEditData.subjectId);
+    if (!selectedSubject) return;
+
+    const isEPS = selectedSubject.code === 'EPS' || 
+                  selectedSubject.name?.toUpperCase().includes('EPS') || 
+                  selectedSubject.name?.toUpperCase().includes('ÉDUCATION PHYSIQUE');
+    
+    if (isEPS) {
+      // Automatically set the first available classroom for EPS
+      setQuickEditData((prev) => ({ ...prev, classroomId: classroomsData[0].id }));
+    }
+  }, [quickEditData.subjectId, quickEditData.classroomId, classroomsData, subjectsData]);
+
+  // Organiser les données par jour et créneau horaire
+  const getTimetableCell = (day: string, record: any) => {
+    if (record.isBreak || record.isSeparator) {
+      return { isBreak: record.isBreak, isSeparator: record.isSeparator };
+    }
+
+    if (!timetablesData || timetablesData.length === 0) {
+      return null;
+    }
+
+    const timetable = timetablesData.find(
+      (t: any) => {
+        const tStart = t.start_time?.startsWith ? t.start_time.substring(0, 5) : t.start_time;
+        const tEnd = t.end_time?.startsWith ? t.end_time.substring(0, 5) : t.end_time;
+        return (
+          t.day_of_week === day &&
+          (tStart === record.start || tStart?.startsWith(record.start)) &&
+          (tEnd === record.end || tEnd?.startsWith(record.end))
+        );
+      }
+    );
+
+    return timetable || null;
+  };
+
+  // Colonnes du tableau
+  const columns = [
+    {
+      title: 'HORAIRES',
+      dataIndex: 'time',
+      key: 'time',
+      width: 140,
+      render: (text: string, record: any) => {
+        if (record.isBreak || record.isSeparator) {
+          return null;
+        }
+        return <strong style={{ fontSize: '13px', color: '#1a1a1a' }}>{text}</strong>;
+      },
+    },
+     ...DAYS_OF_WEEK.map((day, dayIndex) => ({
+      title: day.label.toUpperCase(),
+      key: day.value,
+      width: 200,
+      onCell: (record: any) => {
+        if (record.isSeparator) {
+          if (dayIndex === 0) {
+            return { colSpan: DAYS_OF_WEEK.length };
+          }
+          return { colSpan: 0 };
+        }
+        return {};
+      },
+      render: (_: any, record: any) => {
+        const cell = getTimetableCell(day.value, record);
+        const isEditing = editingCell?.day === day.value && editingCell?.timeSlot === record.time;
+        
+        if (record.isBreak) {
+          // Afficher RECREATION seulement dans la première colonne (Lundi)
+          if (day.value === 'MONDAY') {
+            return (
+              <div
+                style={{
+                  textAlign: 'center',
+                  padding: '8px',
+                  background: '#f0f0f0',
+                  fontWeight: 500,
+                  color: '#666',
+                }}
+              >
+                {record.breakLabel || 'RECREATION'}
+              </div>
+            );
+          }
+          return null;
+        }
+
+        if (record.isSeparator) {
+          // Afficher APRES-MIDI sur toute la ligne (seulement dans la première colonne)
+          if (dayIndex === 0) {
+            return (
+              <div
+                style={{
+                  textAlign: 'center',
+                  padding: '8px',
+                  background: '#f0f0f0',
+                  fontWeight: 500,
+                  color: '#666',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: '40px',
+                }}
+              >
+                APRES-MIDI
+              </div>
+            );
+          }
+          return null;
+        }
+
+        if (isEditing) {
+          return (
+            <div
+              style={{
+                padding: '8px',
+                background: '#fff',
+                border: '2px solid rgb(var(--role-primary))',
+                borderRadius: '6px',
+              }}
+            >
+              <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                <Select
+                  placeholder="Matière"
+                  value={quickEditData.subjectId}
+                  onChange={(value) => {
+                    // Check if current teacher has assignment for the new subject
+                    let newTeacherId = quickEditData.teacherId;
+                    if (value && teacherAssignmentsData && quickEditData.teacherId) {
+                      const currentTeacher = teacherAssignmentsData.find(
+                        (t: any) => t.id === quickEditData.teacherId
+                      );
+                      const hasAssignment = currentTeacher?.assignments?.some((assignment: any) =>
+                        assignment.subjects?.some((subject: any) => subject.id === value)
+                      );
+                      if (!hasAssignment) {
+                        newTeacherId = undefined;
+                      }
+                    } else {
+                      newTeacherId = undefined;
+                    }
+                    setQuickEditData({ ...quickEditData, subjectId: value, teacherId: newTeacherId });
+                  }}
+                  style={{ width: '100%' }}
+                  size="small"
+                  showSearch
+                  optionFilterProp="children"
+                >
+                  {subjectsData?.map((subject: any) => (
+                    <Select.Option key={subject.id} value={subject.id}>
+                      {subject.name}
+                    </Select.Option>
+                  ))}
+                </Select>
+                <Select
+                  placeholder="Enseignant"
+                  value={quickEditData.teacherId}
+                  onChange={(value) => setQuickEditData({ ...quickEditData, teacherId: value })}
+                  style={{ width: '100%' }}
+                  size="small"
+                  showSearch
+                  optionFilterProp="children"
+                  disabled={!quickEditData.subjectId}
+                >
+                  {(() => {
+                    // Filter teachers based on selected subject
+                    if (!quickEditData.subjectId || !teacherAssignmentsData) {
+                      return null;
+                    }
+
+                    // Get all teachers who have an assignment for this subject
+                    const teachersWithSubject = teacherAssignmentsData
+                      .filter((teacher: any) => {
+                        // Check if teacher has an assignment for the selected subject
+                        return teacher.assignments?.some((assignment: any) =>
+                          assignment.subjects?.some((subject: any) => subject.id === quickEditData.subjectId)
+                        );
+                      })
+                      .map((teacher: any) => ({
+                        id: teacher.id,
+                        first_name: teacher.first_name,
+                        last_name: teacher.last_name,
+                      }));
+
+                    if (teachersWithSubject.length === 0) {
+                      return (
+                        <Select.Option disabled value="no-teacher">
+                          Aucun enseignant assigné à cette matière
+                        </Select.Option>
+                      );
+                    }
+
+                    return teachersWithSubject.map((teacher: any) => (
+                      <Select.Option key={teacher.id} value={teacher.id}>
+                        {teacher.first_name} {teacher.last_name}
+                      </Select.Option>
+                    ));
+                  })()}
+                </Select>
+                {(() => {
+                  // Check if subject is EPS
+                  const selectedSubject = subjectsData?.find((s: any) => s.id === quickEditData.subjectId);
+                  const isEPS = selectedSubject?.code === 'EPS' || selectedSubject?.name?.toUpperCase().includes('EPS') || 
+                                selectedSubject?.name?.toUpperCase().includes('ÉDUCATION PHYSIQUE');
+
+                  // For EPS: hide both classroom and class selects
+                  if (isEPS) {
+                    return null;
+                  }
+
+                  // For non-EPS subjects: show classroom select (class is already selected at the top of the page)
+                  return (
+                    <Select
+                      placeholder="Salle"
+                      value={quickEditData.classroomId}
+                      onChange={(value) => setQuickEditData({ ...quickEditData, classroomId: value })}
+                      style={{ width: '100%' }}
+                      size="small"
+                    >
+                      {classroomsData?.map((classroom: any) => (
+                        <Select.Option key={classroom.id} value={classroom.id}>
+                          {classroom.name}
+                        </Select.Option>
+                      ))}
+                    </Select>
+                  );
+                })()}
+                <Space>
+                  <Button
+                    type="primary"
+                    size="small"
+                    icon={<CheckOutlined />}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleQuickSave(day.value, record, cell || undefined);
+                    }}
+                    loading={createMutation.isPending || updateMutation.isPending}
+                    disabled={createMutation.isPending || updateMutation.isPending}
+                    style={{ 
+                      background: 'var(--role-gradient)',
+                      borderColor: 'transparent',
+                      boxShadow: '0 2px 4px rgba(36, 174, 106, 0.3), 0 1px 2px rgba(233, 103, 2, 0.2)',
+                    }}
+                  >
+                    Valider
+                  </Button>
+                  <Button
+                    size="small"
+                    icon={<CloseOutlined />}
+                    onClick={() => {
+                      setEditingCell(null);
+                      setQuickEditData({});
+                    }}
+                    disabled={createMutation.isPending || updateMutation.isPending}
+                    className="modern-button-secondary-outline"
+                  >
+                    Annuler
+                  </Button>
+                </Space>
+              </Space>
+            </div>
+          );
+        }
+
+        if (cell) {
+          return (
+            <div
+              style={{
+                padding: '8px',
+                background: '#fff',
+                border: '1px solid #e8e8e8',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                minHeight: '60px',
+                position: 'relative',
+              }}
+              onClick={() => handleCellClick(day.value, record, cell)}
+            >
+              <Popconfirm
+                title="Supprimer ce cours ?"
+                onConfirm={(e) => {
+                  e?.stopPropagation();
+                  handleDelete(cell.id);
+                }}
+                okText="Supprimer"
+                cancelText="Annuler"
+                okButtonProps={{ danger: true }}
+                onCancel={(e) => e?.stopPropagation()}
+              >
+                <Button
+                  type="text"
+                  danger
+                  icon={<DeleteOutlined />}
+                  size="small"
+                  style={{
+                    position: 'absolute',
+                    top: '4px',
+                    right: '4px',
+                    padding: '2px 4px',
+                    height: 'auto',
+                    minWidth: 'auto',
+                    zIndex: 10,
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                  title="Supprimer"
+                />
+              </Popconfirm>
+              {(() => {
+                // Check if subject is EPS
+                const isEPS = cell.subject?.code === 'EPS' || 
+                              cell.subject?.name?.toUpperCase().includes('EPS') || 
+                              cell.subject?.name?.toUpperCase().includes('ÉDUCATION PHYSIQUE');
+                
+                return (
+                  <>
+                    <div style={{ fontWeight: 600, color: '#1a1a1a', marginBottom: '4px', fontSize: '13px', paddingRight: '24px' }}>
+                      {cell.subject?.name || cell.subject?.code || 'Matière'}
+                    </div>
+                    {/* Don't display class for any subject */}
+                    {/* For EPS: don't display classroom either */}
+                    {!isEPS && cell.classroom && (
+                      <div style={{ fontSize: '12px', color: 'rgb(var(--role-primary))', marginBottom: '2px' }}>
+                        {cell.classroom?.name || 'Salle'}
+                      </div>
+                    )}
+                    <div style={{ fontSize: '12px', color: '#E96702', marginTop: '2px', fontWeight: 500 }}>
+                      {cell.teacher ? `${cell.teacher.first_name} ${cell.teacher.last_name}` : 'Enseignant'}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          );
+        }
+
+        return (
+          <div
+            style={{
+              padding: '8px',
+              minHeight: '60px',
+              border: '1px dashed #d9d9d9',
+              borderRadius: '6px',
+              textAlign: 'center',
+              color: '#999',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            onClick={() => handleCellClick(day.value, record)}
+          >
+            <span style={{ fontSize: '12px' }}>Cliquer pour ajouter</span>
+          </div>
+        );
+      },
+    })),
+  ];
+
+  const tableData = TIME_SLOTS.map((slot) => ({
+    key: slot.label,
+    time: slot.label,
+    start: slot.start,
+    end: slot.end,
+    isBreak: (slot as any).isBreak,
+    isSeparator: slot.isSeparator,
+    isAfternoon: slot.isAfternoon,
+    breakLabel: (slot as any).breakLabel,
+  }));
+
+  return (
+    <div className="animate-fade-in mx-auto max-w-7xl space-y-8">
+      <PageHeader
+        title="Emploi du Temps"
+        description="Gestion des emplois du temps des classes"
+      />
+
+      <GlassCard variant="glass" styles={{ body: { padding: '24px' } }}>
+        <Row gutter={16} style={{ marginBottom: 24 }}>
+          <Col span={12}>
+            <Select
+              placeholder="Sélectionner l'année scolaire"
+              value={academicYearFilter}
+              onChange={(value) => {
+                setAcademicYearFilter(value);
+                setClassFilter('');
+                setEditingCell(null);
+                setQuickEditData({});
+              }}
+              style={{ width: '100%' }}
+              allowClear
+              size="large"
+            >
+              {academicYearsData?.map((year: any) => (
+                <Select.Option key={year.id} value={year.id}>
+                  {year.name}
+                </Select.Option>
+              ))}
+            </Select>
+          </Col>
+          <Col span={12}>
+            <Select
+              placeholder="Sélectionner la classe"
+              value={classFilter}
+              onChange={(value) => {
+                setClassFilter(value);
+                setEditingCell(null);
+                setQuickEditData({});
+              }}
+              style={{ width: '100%' }}
+              allowClear
+              disabled={!academicYearFilter}
+              size="large"
+            >
+              {classesData?.map((cls: any) => (
+                <Select.Option key={cls.id} value={cls.id}>
+                  {cls.name}
+                </Select.Option>
+              ))}
+            </Select>
+          </Col>
+        </Row>
+
+        {academicYearFilter && classFilter ? (
+          <Table
+            columns={columns}
+            dataSource={tableData}
+            pagination={false}
+            loading={isLoading}
+            scroll={{ x: 1000 }}
+            bordered
+          />
+        ) : (
+          <EmptyState
+            icon={Calendar}
+            title="Sélectionnez une année et une classe"
+            description="Choisissez une année scolaire et une classe pour afficher l'emploi du temps."
+          />
+        )}
+      </GlassCard>
+    </div>
+  );
+}
+

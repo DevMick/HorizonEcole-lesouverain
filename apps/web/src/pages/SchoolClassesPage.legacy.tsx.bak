@@ -1,0 +1,238 @@
+import { useState } from 'react';
+import {
+  Button,
+  Modal,
+  Form,
+  Input,
+  Select,
+  Space,
+  message,
+  Row,
+  Col,
+  Spin,
+} from 'antd';
+import { Plus, Search, GraduationCap } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '../lib/api';
+import { PageHeader } from '../components/ui/page-header';
+import { GlassCard } from '../components/ui/glass-card';
+import { EmptyState } from '../components/ui/empty-state';
+import { ResourceCard } from '../components/pedagogy/ResourceCard';
+import { PaginationBar } from '../components/pedagogy/PaginationBar';
+
+export default function SchoolClassesPage() {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingClass, setEditingClass] = useState<any>(null);
+  const [searchText, setSearchText] = useState<string>('');
+  const [form] = Form.useForm();
+  const queryClient = useQueryClient();
+  const [pagination, setPagination] = useState({
+    current: 1,
+    pageSize: 12,
+  });
+
+  // Fetch classes
+  const { data: classesData, isLoading: classesLoading } = useQuery({
+    queryKey: ['school-classes', searchText],
+    queryFn: async () => {
+      const response = await api.get('/school-classes');
+      return response.data;
+    },
+  });
+
+  // Filter classes based on search
+  const filteredClasses = classesData?.data
+    ? classesData.data.filter((classItem: any) => {
+        if (!searchText) return true;
+        const search = searchText.toLowerCase();
+        return classItem.name?.toLowerCase().includes(search);
+      })
+    : [];
+
+  // Create mutation
+  const createMutation = useMutation({
+    mutationFn: async (values: any) => {
+      const response = await api.post('/school-classes', values);
+      return response.data;
+    },
+    onSuccess: () => {
+      message.success('Classe créée avec succès !');
+      setIsModalOpen(false);
+      form.resetFields();
+      setEditingClass(null);
+      queryClient.invalidateQueries({ queryKey: ['school-classes'] });
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.error || 'Erreur lors de la création');
+    },
+  });
+
+  // Update mutation
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const response = await api.patch(`/school-classes/${id}`, data);
+      return response.data;
+    },
+    onSuccess: () => {
+      message.success('Classe modifiée avec succès !');
+      setIsModalOpen(false);
+      form.resetFields();
+      setEditingClass(null);
+      queryClient.invalidateQueries({ queryKey: ['school-classes'] });
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.error || 'Erreur lors de la modification');
+    },
+  });
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await api.delete(`/school-classes/${id}`);
+      return response.data;
+    },
+    onSuccess: () => {
+      message.success('Classe supprimée !');
+      queryClient.invalidateQueries({ queryKey: ['school-classes'] });
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.error || 'Impossible de supprimer');
+    },
+  });
+
+  const handleEdit = (classItem: any) => {
+    setEditingClass(classItem);
+    form.setFieldsValue({
+      name: classItem.name,
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleCancel = () => {
+    setIsModalOpen(false);
+    setEditingClass(null);
+    form.resetFields();
+  };
+
+  const handleSubmit = async () => {
+    try {
+      const values = await form.validateFields();
+      if (editingClass) {
+        updateMutation.mutate({ id: editingClass.id, data: values });
+      } else {
+      createMutation.mutate(values);
+      }
+    } catch (error) {
+      console.error('Validation error:', error);
+    }
+  };
+
+
+  return (
+    <div className="animate-fade-in mx-auto max-w-7xl space-y-8">
+      <PageHeader
+        title="Classes"
+        description="Gestion des classes et niveaux scolaires"
+        action={
+          <Button
+            type="primary"
+            icon={<Plus className="h-4 w-4" aria-hidden="true" />}
+            onClick={() => setIsModalOpen(true)}
+            size="large"
+          >
+            Nouvelle Classe
+          </Button>
+        }
+      />
+
+      <GlassCard variant="glass" styles={{ body: { padding: '24px' } }}>
+        <Row gutter={16} style={{ marginBottom: 16 }}>
+          <Col span={12}>
+            <Input
+              placeholder="Rechercher par nom..."
+              prefix={<Search className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
+              value={searchText}
+              onChange={(e) => {
+                setSearchText(e.target.value);
+                setPagination({ ...pagination, current: 1 });
+              }}
+              allowClear
+            />
+          </Col>
+        </Row>
+
+        {classesLoading ? (
+          <div className="flex justify-center py-16">
+            <Spin size="large" />
+          </div>
+        ) : filteredClasses && filteredClasses.length > 0 ? (
+          <>
+            <Row gutter={[24, 24]}>
+              {filteredClasses
+                .slice((pagination.current - 1) * pagination.pageSize, pagination.current * pagination.pageSize)
+                .map((classItem: any) => (
+                  <ResourceCard
+                    key={classItem.id}
+                    title={classItem.name}
+                    label="Classe"
+                    icon={GraduationCap}
+                    onEdit={() => handleEdit(classItem)}
+                    onDelete={() => deleteMutation.mutate(classItem.id)}
+                  />
+                ))}
+            </Row>
+            <PaginationBar
+              current={pagination.current}
+              pageSize={pagination.pageSize}
+              total={filteredClasses.length}
+              onChange={(page) => setPagination({ ...pagination, current: page })}
+              onPageSizeChange={(size) => setPagination({ current: 1, pageSize: size })}
+            />
+          </>
+        ) : (
+          <EmptyState
+            icon={GraduationCap}
+            title={
+              classesData === undefined && !classesLoading
+                ? 'Aucune donnée disponible'
+                : 'Aucune classe trouvée'
+            }
+            description="Créez une nouvelle classe pour commencer."
+            actionLabel="Nouvelle Classe"
+            onAction={() => setIsModalOpen(true)}
+          />
+        )}
+      </GlassCard>
+
+      <Modal
+        title={
+          <Space>
+            <GraduationCap className="h-5 w-5 text-role-primary" aria-hidden="true" />
+            <span>{editingClass ? 'Modifier la Classe' : 'Nouvelle Classe'}</span>
+          </Space>
+        }
+        open={isModalOpen}
+        onOk={handleSubmit}
+        onCancel={handleCancel}
+        okText={editingClass ? 'Modifier' : 'Créer'}
+        cancelText="Annuler"
+        confirmLoading={createMutation.isPending || updateMutation.isPending}
+        width={500}
+      >
+        <Form form={form} layout="vertical" style={{ marginTop: '24px' }}>
+          <Form.Item
+            name="name"
+            label="Nom de la classe"
+            rules={[
+              { required: true, message: 'Le nom est requis' },
+              { min: 2, message: 'Le nom doit contenir au moins 2 caractères' },
+            ]}
+          >
+            <Input placeholder="Ex: 6ème A, 5ème B, Terminal C..." size="large" />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  );
+}
+

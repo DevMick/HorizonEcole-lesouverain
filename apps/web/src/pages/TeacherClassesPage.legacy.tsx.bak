@@ -1,0 +1,261 @@
+import { useState, useEffect } from 'react';
+import {
+  Card,
+  Typography,
+  Empty,
+  Tag,
+  Row,
+  Col,
+} from 'antd';
+import {
+  TeamOutlined,
+  BookOutlined,
+  CalendarOutlined,
+} from '@ant-design/icons';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '../lib/api';
+
+const { Title, Text } = Typography;
+
+export default function TeacherClassesPage() {
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState<any>(null);
+
+  // Fetch academic years
+  const { data: academicYearsData } = useQuery({
+    queryKey: ['academic-years-all'],
+    queryFn: async () => {
+      const response = await api.get('/academic-years');
+      return response.data.data || [];
+    },
+  });
+
+  // Get current academic year as default
+  useEffect(() => {
+    if (academicYearsData && academicYearsData.length > 0 && !selectedAcademicYear) {
+      const currentYear = academicYearsData.find((year: any) => year.isCurrent);
+      if (currentYear) {
+        setSelectedAcademicYear(currentYear);
+      }
+    }
+  }, [academicYearsData, selectedAcademicYear]);
+
+  // Fetch teacher's class assignments
+  const { data: assignmentsData, isLoading: assignmentsLoading } = useQuery({
+    queryKey: ['teacher-assignments', selectedAcademicYear?.id],
+    queryFn: async () => {
+      if (!selectedAcademicYear) return [];
+      
+      try {
+        const response = await api.get(`/teachers/me/assignments?academicYearId=${selectedAcademicYear.id}`);
+        return response.data.data || [];
+      } catch (error: any) {
+        console.error('Error fetching assignments:', error);
+        return [];
+      }
+    },
+    enabled: !!selectedAcademicYear,
+  });
+
+
+  return (
+    <div style={{ padding: '0' }} className="fade-in">
+      {/* Header */}
+      <div className="page-header" style={{ marginBottom: '24px' }}>
+        <Title level={2} style={{ margin: 0, color: 'rgb(var(--role-primary))' }}>
+          <TeamOutlined style={{ marginRight: '12px' }} />
+          Mes Classes
+        </Title>
+        <p style={{ margin: '8px 0 0 0', color: '#666', fontSize: '16px' }}>
+          Liste des classes auxquelles vous êtes affecté
+        </p>
+        {/* Accent gradient harmonieux sous le titre */}
+        <div style={{ 
+          width: '100px', 
+          height: '4px', 
+          background: 'var(--role-gradient)',
+          margin: '12px 0 0 0',
+          borderRadius: '2px',
+          boxShadow: '0 2px 4px rgba(233, 103, 2, 0.2)'
+        }}></div>
+      </div>
+
+      {/* Assignments Cards */}
+      {selectedAcademicYear ? (
+        <>
+          {assignmentsLoading ? (
+            <Card className="modern-card">
+              <div style={{ textAlign: 'center', padding: '40px' }}>
+                <Text>Chargement des affectations...</Text>
+              </div>
+            </Card>
+          ) : !assignmentsData || assignmentsData.length === 0 ? (
+            <Card className="modern-card">
+              <Empty
+                description="Aucune affectation trouvée pour cette année scolaire"
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+              />
+            </Card>
+          ) : (
+            <Row gutter={[24, 24]}>
+              {assignmentsData.map((assignment: any) => (
+                <Col xs={24} sm={12} key={`${assignment.academicYear?.id}-${assignment.class?.id}`}>
+                  <Card
+                    className="modern-card"
+                    hoverable
+                    style={{
+                      height: '100%',
+                      borderRadius: '12px',
+                      boxShadow: '0 2px 8px rgba(36, 174, 106, 0.1)',
+                      border: '1px solid rgba(36, 174, 106, 0.1)',
+                      transition: 'all 0.3s ease',
+                      position: 'relative',
+                      overflow: 'hidden',
+                    }}
+                    bodyStyle={{ padding: '20px' }}
+                    onMouseEnter={(e) => {
+                      const card = e.currentTarget.closest('.ant-card');
+                      if (card) {
+                        (card as HTMLElement).style.boxShadow = '0 4px 16px rgba(36, 174, 106, 0.15), 0 2px 8px rgba(233, 103, 2, 0.1)';
+                        (card as HTMLElement).style.borderColor = 'rgba(233, 103, 2, 0.2)';
+                        (card as HTMLElement).style.transform = 'translateY(-2px)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      const card = e.currentTarget.closest('.ant-card');
+                      if (card) {
+                        (card as HTMLElement).style.boxShadow = '0 2px 8px rgba(36, 174, 106, 0.1)';
+                        (card as HTMLElement).style.borderColor = 'rgba(36, 174, 106, 0.1)';
+                        (card as HTMLElement).style.transform = 'translateY(0)';
+                      }
+                    }}
+                  >
+                    {/* Header avec nom de la classe */}
+                    <div style={{ marginBottom: '16px', borderBottom: '1px solid rgba(36, 174, 106, 0.1)', paddingBottom: '12px', position: 'relative' }}>
+                      {/* Accent gradient subtil en haut de la carte */}
+                      <div style={{
+                        position: 'absolute',
+                        top: '-20px',
+                        left: 0,
+                        right: 0,
+                        height: '3px',
+                        background: 'var(--role-gradient)',
+                        borderRadius: '12px 12px 0 0',
+                        opacity: 0.6,
+                      }}></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ 
+                            fontSize: '20px', 
+                            fontWeight: 600, 
+                            color: 'rgb(var(--role-primary))',
+                            marginBottom: '4px',
+                            lineHeight: '1.4',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                          }}>
+                            <TeamOutlined style={{ fontSize: '24px' }} />
+                            {assignment.class?.name || 'N/A'}
+                          </div>
+                        </div>
+                        {assignment.academicYear?.isCurrent && (
+                          <Tag 
+                            style={{ 
+                              margin: 0,
+                              padding: '4px 12px',
+                              borderRadius: '6px',
+                              fontWeight: 500,
+                              background: 'linear-gradient(135deg, rgba(36, 174, 106, 0.15) 0%, rgba(233, 103, 2, 0.1) 100%)',
+                              border: '1px solid rgba(36, 174, 106, 0.3)',
+                              color: 'rgb(var(--role-primary))',
+                            }}
+                          >
+                            En cours
+                          </Tag>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Année Scolaire */}
+                    <div style={{ marginBottom: '16px' }}>
+                      <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        marginBottom: '8px',
+                        fontSize: '14px',
+                        color: '#666',
+                      }}>
+                        <CalendarOutlined style={{ marginRight: '8px', color: 'rgb(var(--role-primary))', fontSize: '16px' }} />
+                        <span>{assignment.academicYear?.name || 'N/A'}</span>
+                      </div>
+                    </div>
+
+                    {/* Matières */}
+                    <div style={{ marginBottom: '16px' }}>
+                      <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        marginBottom: '12px',
+                        fontSize: '14px',
+                        fontWeight: 500,
+                        color: '#1a1a1a',
+                      }}>
+                        <BookOutlined style={{ marginRight: '6px', color: 'rgb(var(--role-primary))', fontSize: '16px' }} />
+                        <span>Matières enseignées</span>
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                        {assignment.subjects && assignment.subjects.length > 0 ? (
+                          assignment.subjects.map((subject: any, index: number) => (
+                            <Tag
+                              key={index}
+                              style={{
+                                background: 'linear-gradient(135deg, rgba(36, 174, 106, 0.1) 0%, rgba(36, 174, 106, 0.05) 100%)',
+                                border: '1px solid rgba(36, 174, 106, 0.3)',
+                                color: 'rgb(var(--role-primary))',
+                                borderRadius: '6px',
+                                fontSize: '13px',
+                                padding: '6px 14px',
+                                margin: 0,
+                                fontWeight: 500,
+                              }}
+                            >
+                              {subject.name}
+                            </Tag>
+                          ))
+                        ) : (
+                          <Text type="secondary" style={{ fontSize: '13px' }}>Aucune matière</Text>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Nombre de matières */}
+                    {assignment.subjects && assignment.subjects.length > 0 && (
+                      <div style={{ 
+                        marginTop: '16px', 
+                        paddingTop: '16px', 
+                        borderTop: '1px solid rgba(36, 174, 106, 0.1)',
+                        textAlign: 'center',
+                      }}>
+                        <Text type="secondary" style={{ fontSize: '13px' }}>
+                          {assignment.subjects.length} {assignment.subjects.length > 1 ? 'matières' : 'matière'}
+                        </Text>
+                      </div>
+                    )}
+                  </Card>
+                </Col>
+              ))}
+            </Row>
+          )}
+        </>
+      ) : (
+        <Card className="modern-card">
+          <Empty
+            description="Chargement des données..."
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          />
+        </Card>
+      )}
+    </div>
+  );
+}
+

@@ -1,0 +1,374 @@
+import { useEffect, useState } from 'react';
+import {
+  Table,
+  Button,
+  Modal,
+  Form,
+  Input,
+  Select,
+  Space,
+  Tag,
+  message,
+  Popconfirm,
+  Row,
+  Col,
+} from 'antd';
+import { EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Search, UserPlus, UsersRound } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '../lib/api';
+import { PageHeader } from '../components/ui/page-header';
+import { GlassCard } from '../components/ui/glass-card';
+import { EmptyState } from '../components/ui/empty-state';
+import { PaginationBar } from '../components/pedagogy/PaginationBar';
+
+export default function ParentsPage() {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingParent, setEditingParent] = useState<any>(null);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [searchText, setSearchText] = useState('');
+  const [pagination, setPagination] = useState({ current: 1, pageSize: 12 });
+  const [form] = Form.useForm();
+  const queryClient = useQueryClient();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['parents', searchText, pagination.current, pagination.pageSize],
+    queryFn: async () => {
+      const response = await api.get('/parents', {
+        params: { search: searchText || undefined, page: pagination.current, limit: pagination.pageSize },
+      });
+      return response.data;
+    },
+  });
+
+  const parents = data?.data || [];
+  const total = data?.pagination?.total ?? parents.length;
+
+  // Fetched in the background to populate the student picker - not shown as a separate list
+  const { data: studentsData } = useQuery({
+    queryKey: ['students-all-for-parents'],
+    queryFn: async () => {
+      const response = await api.get('/students', { params: { limit: 1000, page: 1 } });
+      return response.data?.data || [];
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (values: any) => {
+      const response = await api.post('/parents', values);
+      return response.data.data;
+    },
+    onSuccess: async (parent) => {
+      // Link the selected students to the newly created parent
+      if (selectedStudentIds.length > 0) {
+        await Promise.all(
+          selectedStudentIds.map((studentId) =>
+            api.post(`/students/${studentId}/parents`, {
+              parentId: parent.id,
+              relation: parent.relation || 'AUTRE',
+            }).catch(() => null),
+          ),
+        );
+      }
+      message.success('Parent enregistré avec succès !');
+      queryClient.invalidateQueries({ queryKey: ['parents'] });
+      queryClient.invalidateQueries({ queryKey: ['students'] });
+      handleCancel();
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.message || error.response?.data?.error || "Erreur lors de l'enregistrement");
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, values }: { id: string; values: any }) => {
+      const response = await api.put(`/parents/${id}`, values);
+      return response.data.data;
+    },
+    onSuccess: async () => {
+      const parentId = editingParent?.id;
+      const currentIds: string[] = (editingParent?.studentParents || []).map((sp: any) => sp.student.id);
+      const toLink = selectedStudentIds.filter((id) => !currentIds.includes(id));
+      const toUnlink = currentIds.filter((id) => !selectedStudentIds.includes(id));
+
+      await Promise.all([
+        ...toLink.map((studentId) =>
+          api.post(`/students/${studentId}/parents`, { parentId, relation: 'AUTRE' }).catch(() => null),
+        ),
+        ...toUnlink.map((studentId) =>
+          api.delete(`/students/${studentId}/parents/${parentId}`).catch(() => null),
+        ),
+      ]);
+
+      message.success('Parent mis à jour !');
+      queryClient.invalidateQueries({ queryKey: ['parents'] });
+      queryClient.invalidateQueries({ queryKey: ['students'] });
+      handleCancel();
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.message || error.response?.data?.error || 'Erreur lors de la mise à jour');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await api.delete(`/parents/${id}`);
+      return response.data;
+    },
+    onSuccess: () => {
+      message.success('Parent supprimé !');
+      queryClient.invalidateQueries({ queryKey: ['parents'] });
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.message || 'Impossible de supprimer ce parent (élèves encore liés ?)');
+    },
+  });
+
+  const handleCancel = () => {
+    setIsModalOpen(false);
+    setEditingParent(null);
+    setSelectedStudentIds([]);
+    form.resetFields();
+  };
+
+  const openCreateModal = () => {
+    setEditingParent(null);
+    setSelectedStudentIds([]);
+    form.resetFields();
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (parent: any) => {
+    setEditingParent(parent);
+    setSelectedStudentIds((parent.studentParents || []).map((sp: any) => sp.student.id));
+    setIsModalOpen(true);
+  };
+
+  useEffect(() => {
+    if (isModalOpen && editingParent) {
+      const timer = setTimeout(() => {
+        form.setFieldsValue({
+          lastName: editingParent.lastName,
+          firstName: editingParent.firstName,
+          phone: editingParent.phone,
+          email: editingParent.email || '',
+        });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isModalOpen, editingParent, form]);
+
+  const handleSubmit = async () => {
+    try {
+      const values = await form.validateFields();
+      const payload = {
+        lastName: values.lastName.trim(),
+        firstName: values.firstName.trim(),
+        phone: values.phone.trim(),
+        email: values.email ? values.email.trim() : undefined,
+        relation: 'AUTRE',
+      };
+
+      if (editingParent) {
+        updateMutation.mutate({ id: editingParent.id, values: payload });
+      } else {
+        createMutation.mutate(payload);
+      }
+    } catch {
+      // validation errors already surfaced inline by antd
+    }
+  };
+
+  const columns = [
+    {
+      title: 'Nom et Prénoms',
+      key: 'fullName',
+      render: (_: any, record: any) => (
+        <div className="font-semibold text-foreground">{record.lastName} {record.firstName}</div>
+      ),
+    },
+    {
+      title: 'Contact',
+      dataIndex: 'phone',
+      key: 'phone',
+      width: 150,
+    },
+    {
+      title: 'Email',
+      dataIndex: 'email',
+      key: 'email',
+      render: (email: string) => email || <span className="text-muted-foreground">—</span>,
+    },
+    {
+      title: 'Élèves liés',
+      key: 'students',
+      render: (_: any, record: any) => {
+        const count = record.studentParents?.length || 0;
+        return count === 0
+          ? <Tag>Aucun</Tag>
+          : (
+            <div className="flex flex-wrap gap-1">
+              {record.studentParents.slice(0, 3).map((sp: any) => (
+                <Tag key={sp.id} color="blue">{sp.student.lastName} {sp.student.firstName}</Tag>
+              ))}
+              {count > 3 && <Tag>+{count - 3}</Tag>}
+            </div>
+          );
+      },
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      width: 100,
+      align: 'center' as const,
+      render: (_: any, record: any) => (
+        <Space size={0}>
+          <Button type="text" icon={<EditOutlined />} title="Modifier" onClick={() => openEditModal(record)} />
+          <Popconfirm
+            title="Supprimer ce parent ?"
+            description="Les élèves déjà liés doivent d'abord être détachés."
+            onConfirm={() => deleteMutation.mutate(record.id)}
+            okText="Supprimer"
+            cancelText="Annuler"
+            okButtonProps={{ danger: true }}
+          >
+            <Button type="text" danger icon={<DeleteOutlined />} title="Supprimer" />
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
+
+  return (
+    <div className="animate-fade-in mx-auto max-w-7xl space-y-8">
+      <PageHeader
+        title="Parents"
+        description="Enregistrement des parents/tuteurs et association aux élèves"
+        action={
+          <Button type="primary" icon={<UserPlus className="h-4 w-4" aria-hidden="true" />} onClick={openCreateModal} size="large">
+            Nouveau parent
+          </Button>
+        }
+      />
+
+      <GlassCard variant="glass" styles={{ body: { padding: '24px' } }}>
+        <Row gutter={[16, 16]} style={{ marginBottom: 16 }} align="middle">
+          <Col xs={24} md={14} lg={12}>
+            <Input
+              placeholder="Rechercher par nom, contact, email..."
+              prefix={<Search className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
+              value={searchText}
+              onChange={(e) => {
+                setSearchText(e.target.value);
+                setPagination((p) => ({ ...p, current: 1 }));
+              }}
+              allowClear
+            />
+          </Col>
+          <Col xs={24} md={10} lg={12}>
+            <div className="text-sm text-muted-foreground text-right">
+              {total} parent{total > 1 ? 's' : ''} enregistré{total > 1 ? 's' : ''}
+            </div>
+          </Col>
+        </Row>
+
+        {parents.length === 0 && !isLoading ? (
+          <EmptyState
+            icon={UsersRound}
+            title="Aucun parent enregistré"
+            description="Commencez par enregistrer un nouveau parent/tuteur."
+            actionLabel="Nouveau parent"
+            onAction={openCreateModal}
+          />
+        ) : (
+          <>
+            <Table
+              dataSource={parents}
+              rowKey="id"
+              columns={columns}
+              loading={isLoading}
+              className="modern-table"
+              scroll={{ x: 'max-content' }}
+              pagination={false}
+            />
+            <PaginationBar
+              current={pagination.current}
+              pageSize={pagination.pageSize}
+              total={total}
+              onChange={(page) => setPagination((p) => ({ ...p, current: page }))}
+              onPageSizeChange={(size) => setPagination({ current: 1, pageSize: size })}
+            />
+          </>
+        )}
+      </GlassCard>
+
+      <Modal
+        title={
+          <Space>
+            <UsersRound className="h-5 w-5 text-role-primary" aria-hidden="true" />
+            <span>{editingParent ? 'Modifier le parent/tuteur' : 'Nouveau parent/tuteur'}</span>
+          </Space>
+        }
+        open={isModalOpen}
+        onOk={handleSubmit}
+        onCancel={handleCancel}
+        okText={editingParent ? 'Mettre à jour' : 'Enregistrer'}
+        cancelText="Annuler"
+        confirmLoading={createMutation.isPending || updateMutation.isPending}
+        width={640}
+        styles={{ mask: { backdropFilter: 'blur(10px)', background: 'rgba(0,0,0,0.65)' } }}
+      >
+        <Form form={form} layout="vertical" style={{ marginTop: 24 }} preserve={false}>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="lastName" label="Nom" rules={[{ required: true, message: 'Nom requis' }, { min: 2, message: 'Minimum 2 caractères' }]}>
+                <Input placeholder="Nom de famille" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="firstName" label="Prénom" rules={[{ required: true, message: 'Prénom requis' }, { min: 2, message: 'Minimum 2 caractères' }]}>
+                <Input placeholder="Prénom" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="phone" label="Contact" rules={[{ required: true, message: 'Contact requis' }, { min: 8, message: 'Numéro trop court' }]}>
+                <Input placeholder="+225 XX XX XX XX XX" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="email" label="Adresse email (optionnel)" rules={[{ type: 'email', message: 'Email invalide' }]}>
+                <Input placeholder="exemple@email.com" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item label="Élèves à associer">
+            <Select
+              mode="multiple"
+              placeholder="Rechercher et sélectionner un ou plusieurs élèves"
+              value={selectedStudentIds}
+              onChange={setSelectedStudentIds}
+              showSearch
+              optionFilterProp="children"
+              filterOption={(input, option) =>
+                (option?.children as unknown as string)?.toString().toLowerCase().includes(input.toLowerCase())
+              }
+            >
+              {(studentsData || []).map((student: any) => (
+                <Select.Option key={student.id} value={student.id}>
+                  {student.lastName} {student.firstName} — {student.studentNumber}
+                </Select.Option>
+              ))}
+            </Select>
+            <div className="mt-2 text-xs text-muted-foreground">
+              Sélectionnez les élèves rattachés à ce parent/tuteur.
+            </div>
+          </Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  );
+}

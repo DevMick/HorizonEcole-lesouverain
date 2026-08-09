@@ -1,0 +1,416 @@
+import { useState, useEffect } from 'react';
+import {
+  Card,
+  Typography,
+  Empty,
+  Tag,
+  Row,
+  Col,
+} from 'antd';
+import {
+  ScheduleOutlined,
+  CalendarOutlined,
+  ClockCircleOutlined,
+  TeamOutlined,
+  BookOutlined,
+  IdcardOutlined,
+} from '@ant-design/icons';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '../lib/api';
+
+const { Title, Text } = Typography;
+
+const dayNames: { [key: string]: string } = {
+  MONDAY: 'Lundi',
+  TUESDAY: 'Mardi',
+  WEDNESDAY: 'Mercredi',
+  THURSDAY: 'Jeudi',
+  FRIDAY: 'Vendredi',
+  SATURDAY: 'Samedi',
+};
+
+export default function TeacherTimetablePage() {
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState<any>(null);
+
+  // Fetch academic years
+  const { data: academicYearsData } = useQuery({
+    queryKey: ['academic-years-all'],
+    queryFn: async () => {
+      const response = await api.get('/academic-years');
+      return response.data.data || [];
+    },
+  });
+
+  // Get current academic year as default
+  useEffect(() => {
+    if (academicYearsData && academicYearsData.length > 0 && !selectedAcademicYear) {
+      const currentYear = academicYearsData.find((year: any) => year.isCurrent);
+      if (currentYear) {
+        setSelectedAcademicYear(currentYear);
+      }
+    }
+  }, [academicYearsData, selectedAcademicYear]);
+
+  // Fetch teacher's timetable
+  const { data: timetableData, isLoading: timetableLoading } = useQuery({
+    queryKey: ['teacher-timetable', selectedAcademicYear?.id],
+    queryFn: async () => {
+      if (!selectedAcademicYear) return [];
+      
+      try {
+        const response = await api.get(`/teachers/me/timetable?academicYearId=${selectedAcademicYear.id}`);
+        return response.data.data || [];
+      } catch (error: any) {
+        console.error('Error fetching timetable:', error);
+        return [];
+      }
+    },
+    enabled: !!selectedAcademicYear,
+  });
+
+  // Get current day
+  const getCurrentDay = () => {
+    const today = new Date().getDay();
+    const dayMap: { [key: number]: string } = {
+      1: 'MONDAY',
+      2: 'TUESDAY',
+      3: 'WEDNESDAY',
+      4: 'THURSDAY',
+      5: 'FRIDAY',
+      6: 'SATURDAY',
+      0: 'SUNDAY',
+    };
+    return dayMap[today];
+  };
+
+  const currentDay = getCurrentDay();
+
+  // Get current time in HH:MM format
+  const getCurrentTime = () => {
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+
+  // Find next course (today's future courses or next day's first course)
+  const findNextCourse = () => {
+    if (!timetableData || timetableData.length === 0) return null;
+    
+    const currentTime = getCurrentTime();
+    const dayOrder = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+    const currentDayIndex = dayOrder.indexOf(currentDay);
+    
+    // First, check for today's future courses
+    const todayFutureCourses = timetableData.filter((course: any) => {
+      return course.day_of_week === currentDay && course.start_time >= currentTime;
+    });
+    
+    if (todayFutureCourses.length > 0) {
+      // Return the closest one
+      return todayFutureCourses.sort((a: any, b: any) => {
+        return a.start_time.localeCompare(b.start_time);
+      })[0];
+    }
+    
+    // If no future courses today, find the next day's first course
+    for (let i = 1; i <= 7; i++) {
+      const nextDayIndex = (currentDayIndex + i) % 7;
+      const nextDay = dayOrder[nextDayIndex];
+      
+      const nextDayCourses = timetableData.filter((course: any) => {
+        return course.day_of_week === nextDay;
+      });
+      
+      if (nextDayCourses.length > 0) {
+        // Return the first course of that day (sorted by time)
+        return nextDayCourses.sort((a: any, b: any) => {
+          return a.start_time.localeCompare(b.start_time);
+        })[0];
+      }
+    }
+    
+    return null;
+  };
+
+  const nextCourse = findNextCourse();
+
+  // Sort timetable: today's courses first, then by day and time
+  const sortedTimetableData = timetableData ? [...timetableData].sort((a: any, b: any) => {
+    const dayOrder = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+    const isTodayA = a.day_of_week === currentDay;
+    const isTodayB = b.day_of_week === currentDay;
+    const isNextA = nextCourse && a.id === nextCourse.id;
+    const isNextB = nextCourse && b.id === nextCourse.id;
+    
+    // If one is today and the other is not, today comes first
+    if (isTodayA && !isTodayB) return -1;
+    if (!isTodayA && isTodayB) return 1;
+    
+    // If one is the next course and the other is not, next course comes first (after today's)
+    if (!isTodayA && !isTodayB) {
+      if (isNextA && !isNextB) return -1;
+      if (!isNextA && isNextB) return 1;
+    }
+    
+    // If both are today, sort by time (closest to current time first)
+    if (isTodayA && isTodayB) {
+      const currentTime = getCurrentTime();
+      const timeA = a.start_time || '';
+      const timeB = b.start_time || '';
+      
+      // Compare times relative to current time
+      const timeDiffA = Math.abs(new Date(`2000-01-01 ${timeA}`).getTime() - new Date(`2000-01-01 ${currentTime}`).getTime());
+      const timeDiffB = Math.abs(new Date(`2000-01-01 ${timeB}`).getTime() - new Date(`2000-01-01 ${currentTime}`).getTime());
+      
+      // If times are close, sort by which is next (future times first)
+      if (timeA >= currentTime && timeB < currentTime) return -1;
+      if (timeA < currentTime && timeB >= currentTime) return 1;
+      
+      // Otherwise sort by proximity to current time
+      return timeDiffA - timeDiffB;
+    }
+    
+    // If neither is today, sort by day order
+    const dayA = dayOrder.indexOf(a.day_of_week);
+    const dayB = dayOrder.indexOf(b.day_of_week);
+    
+    if (dayA !== dayB) {
+      return dayA - dayB;
+    }
+    
+    // If same day, sort by start time
+    const timeA = a.start_time || '';
+    const timeB = b.start_time || '';
+    return timeA.localeCompare(timeB);
+  }) : [];
+
+  return (
+    <div style={{ padding: '0' }} className="fade-in">
+      {/* Header */}
+      <div className="page-header" style={{ marginBottom: '24px' }}>
+        <Title level={2} style={{ margin: 0, color: 'rgb(var(--role-primary))' }}>
+          <ScheduleOutlined style={{ marginRight: '12px' }} />
+          Mon Emploi du Temps
+        </Title>
+        <p style={{ margin: '8px 0 0 0', color: '#666', fontSize: '16px' }}>
+          Consultation de votre emploi du temps hebdomadaire
+        </p>
+        {/* Accent gradient harmonieux sous le titre */}
+        <div style={{ 
+          width: '100px', 
+          height: '4px', 
+          background: 'var(--role-gradient)',
+          margin: '12px 0 0 0',
+          borderRadius: '2px',
+          boxShadow: '0 2px 4px rgba(233, 103, 2, 0.2)'
+        }}></div>
+      </div>
+
+      {/* Timetable Cards */}
+      {selectedAcademicYear ? (
+        <>
+          {timetableLoading ? (
+            <Card className="modern-card">
+              <div style={{ textAlign: 'center', padding: '40px' }}>
+                <Text>Chargement de l'emploi du temps...</Text>
+              </div>
+            </Card>
+          ) : !sortedTimetableData || sortedTimetableData.length === 0 ? (
+            <Card className="modern-card">
+              <Empty
+                description="Aucun cours programmé pour cette année scolaire"
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+              />
+            </Card>
+          ) : (
+            <Row gutter={[24, 24]}>
+              {sortedTimetableData.map((course: any) => {
+                const isToday = course.day_of_week === currentDay;
+                const isNext = nextCourse && course.id === nextCourse.id && !isToday;
+                return (
+                <Col xs={24} sm={12} md={8} key={course.id}>
+                  <Card
+                    className="modern-card"
+                    hoverable
+                    style={{
+                      height: '100%',
+                      borderRadius: '12px',
+                      boxShadow: isToday 
+                        ? '0 4px 16px rgba(36, 174, 106, 0.3)' 
+                        : isNext
+                        ? '0 4px 16px rgba(24, 144, 255, 0.3)'
+                        : '0 2px 8px rgba(0,0,0,0.1)',
+                      border: isToday 
+                        ? '2px solid rgb(var(--role-primary))' 
+                        : isNext
+                        ? '2px solid #1890ff'
+                        : '1px solid #f0f0f0',
+                      transition: 'all 0.3s ease',
+                      background: isToday 
+                        ? 'linear-gradient(135deg, rgba(36, 174, 106, 0.05) 0%, rgba(255, 255, 255, 1) 100%)'
+                        : isNext
+                        ? 'linear-gradient(135deg, rgba(24, 144, 255, 0.05) 0%, rgba(255, 255, 255, 1) 100%)'
+                        : '#fff',
+                    }}
+                    bodyStyle={{ padding: '20px' }}
+                  >
+                    {/* Header avec jour et heure */}
+                    <div style={{ marginBottom: '16px', borderBottom: isToday ? '2px solid rgb(var(--role-primary))' : isNext ? '2px solid #1890ff' : '1px solid rgba(36, 174, 106, 0.1)', paddingBottom: '12px', position: 'relative' }}>
+                      {/* Accent gradient subtil en haut de la carte */}
+                      <div style={{
+                        position: 'absolute',
+                        top: '-20px',
+                        left: 0,
+                        right: 0,
+                        height: '3px',
+                        background: isToday 
+                          ? 'var(--role-gradient)'
+                          : isNext
+                          ? 'linear-gradient(90deg, #1890ff 0%, #40a9ff 50%, #E96702 100%)'
+                          : 'var(--role-gradient)',
+                        borderRadius: '12px 12px 0 0',
+                        opacity: isToday || isNext ? 0.8 : 0.6,
+                      }}></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ 
+                            fontSize: '18px', 
+                            fontWeight: 600, 
+                            color: isToday ? 'rgb(var(--role-primary))' : isNext ? '#1890ff' : 'rgb(var(--role-primary))',
+                            marginBottom: '6px',
+                            lineHeight: '1.4',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                          }}>
+                            <CalendarOutlined style={{ fontSize: '20px', color: isToday ? 'rgb(var(--role-primary))' : isNext ? '#1890ff' : 'rgb(var(--role-primary))' }} />
+                            {dayNames[course.day_of_week] || course.day_of_week}
+                            {isToday && (
+                              <Tag 
+                                color="green" 
+                                style={{ 
+                                  margin: 0,
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  marginLeft: '8px',
+                                }}
+                              >
+                                Aujourd'hui
+                              </Tag>
+                            )}
+                            {isNext && (
+                              <Tag 
+                                color="blue" 
+                                style={{ 
+                                  margin: 0,
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  marginLeft: '8px',
+                                }}
+                              >
+                                Prochain cours
+                              </Tag>
+                            )}
+                          </div>
+                          <div style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '6px',
+                            fontSize: '15px',
+                            color: isToday ? 'rgb(var(--role-primary))' : isNext ? '#1890ff' : '#1890ff',
+                            fontWeight: isToday || isNext ? 600 : 500,
+                          }}>
+                            <ClockCircleOutlined style={{ fontSize: '16px' }} />
+                            {course.start_time} - {course.end_time}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Matière */}
+                    <div style={{ marginBottom: '16px' }}>
+                      <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        marginBottom: '8px',
+                        fontSize: '14px',
+                        fontWeight: 500,
+                        color: '#1a1a1a',
+                      }}>
+                        <BookOutlined style={{ marginRight: '8px', color: 'rgb(var(--role-primary))', fontSize: '16px' }} />
+                        <span>Matière</span>
+                      </div>
+                      <Text strong style={{ fontSize: '16px', color: 'rgb(var(--role-primary))' }}>
+                        {course.subject?.name || 'N/A'}
+                      </Text>
+                    </div>
+
+                    {/* Classe */}
+                    <div style={{ marginBottom: '16px' }}>
+                      <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        marginBottom: '8px',
+                        fontSize: '14px',
+                        fontWeight: 500,
+                        color: '#1a1a1a',
+                      }}>
+                        <TeamOutlined style={{ marginRight: '8px', color: 'rgb(var(--role-primary))', fontSize: '16px' }} />
+                        <span>Classe</span>
+                      </div>
+                      <Text strong style={{ fontSize: '15px' }}>
+                        {course.class?.name || 'N/A'}
+                      </Text>
+                    </div>
+
+                    {/* Salle */}
+                    <div style={{ 
+                      marginTop: '16px', 
+                      paddingTop: '16px', 
+                      borderTop: '1px solid rgba(36, 174, 106, 0.1)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <IdcardOutlined style={{ color: 'rgb(var(--role-primary))', fontSize: '16px' }} />
+                        <Text type="secondary" style={{ fontSize: '14px' }}>Salle :</Text>
+                        <Tag
+                          style={{
+                            background: 'linear-gradient(135deg, rgba(36, 174, 106, 0.1) 0%, rgba(36, 174, 106, 0.05) 100%)',
+                            border: '1px solid rgba(36, 174, 106, 0.3)',
+                            color: 'rgb(var(--role-primary))',
+                            borderRadius: '6px',
+                            fontSize: '13px',
+                            padding: '4px 12px',
+                            fontWeight: 500,
+                          }}
+                        >
+                          {course.classroom?.name || 'N/A'}
+                        </Tag>
+                      </div>
+                    </div>
+                  </Card>
+                </Col>
+              );
+              })}
+            </Row>
+          )}
+        </>
+      ) : (
+        <Card className="modern-card">
+          <Empty
+            description="Chargement des données..."
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          />
+        </Card>
+      )}
+    </div>
+  );
+}
+

@@ -1,0 +1,1330 @@
+import { useState, useEffect } from 'react';
+import {
+  Table,
+  Button,
+  Modal,
+  Form,
+  Input,
+  Select,
+  Space,
+  Card,
+  Typography,
+  message,
+  Popconfirm,
+  Tag,
+  DatePicker,
+  Row,
+  Col,
+  Alert,
+  Tabs,
+} from 'antd';
+import {
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  UserOutlined,
+  SearchOutlined,
+  FilterOutlined,
+  CloseOutlined,
+  MinusCircleOutlined,
+  MailOutlined,
+  PhoneOutlined,
+  CalendarOutlined,
+  BookOutlined,
+  TrophyOutlined,
+  EyeOutlined,
+  UserAddOutlined,
+  CopyOutlined,
+  DollarOutlined,
+  WalletOutlined,
+} from '@ant-design/icons';
+import { Plus, Search, User } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '../lib/api';
+import dayjs from 'dayjs';
+import TeacherRemunerationTab from '../components/TeacherRemunerationTab';
+import { PageHeader } from '../components/ui/page-header';
+import { GlassCard } from '../components/ui/glass-card';
+import { EmptyState } from '../components/ui/empty-state';
+import { TeacherCard, type TeacherCardProps } from '../components/people/TeacherCard';
+
+const { Title, Text } = Typography;
+const { TextArea } = Input;
+
+export default function TeachersPage() {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [accountCredentials, setAccountCredentials] = useState<any>(null);
+  const [viewingTeacher, setViewingTeacher] = useState<any>(null);
+  const [editingTeacher, setEditingTeacher] = useState<any>(null);
+  const [searchText, setSearchText] = useState<string>('');
+  const [contractTypeFilter, setContractTypeFilter] = useState<string>('');
+  const [phoneDisplay, setPhoneDisplay] = useState<string>('');
+  const [form] = Form.useForm();
+  const queryClient = useQueryClient();
+  const [pagination, setPagination] = useState({
+    current: 1,
+    pageSize: 12,
+  });
+  const [viewModalActiveTab, setViewModalActiveTab] = useState<string>('info');
+
+  // Effect pour mettre à jour le formulaire quand on édite un enseignant
+  useEffect(() => {
+    if (isModalOpen && editingTeacher) {
+      // Utiliser setTimeout pour s'assurer que le modal est monté
+      const timer = setTimeout(() => {
+        // Convertir les spécialités et qualifications en tableaux si elles sont des strings
+        const specialties = editingTeacher.specialties 
+          ? (typeof editingTeacher.specialties === 'string' 
+              ? editingTeacher.specialties.split(',').map((s: string) => s.trim()).filter((s: string) => s)
+              : Array.isArray(editingTeacher.specialties) ? editingTeacher.specialties : [])
+          : [];
+        const qualifications = editingTeacher.qualifications
+          ? (typeof editingTeacher.qualifications === 'string'
+              ? editingTeacher.qualifications.split(',').map((q: string) => q.trim()).filter((q: string) => q)
+              : Array.isArray(editingTeacher.qualifications) ? editingTeacher.qualifications : [])
+          : [];
+        
+        // Get phone and normalize it
+        let phoneValue = editingTeacher.phone || '';
+        // If phone doesn't start with +225, add it
+        if (phoneValue && !phoneValue.startsWith('+225')) {
+          const digitsOnly = phoneValue.replace(/\D/g, '');
+          if (digitsOnly.length > 0) {
+            phoneValue = `+225${digitsOnly}`;
+          }
+        }
+        
+        // Format phone number for display
+        const phoneDisplayValue = phoneValue 
+          ? phoneValue.replace(/^\+225\s*/, '').replace(/\s/g, '')
+          : '';
+        const formattedPhone = phoneDisplayValue.match(/.{1,2}/g)?.join(' ') || phoneDisplayValue;
+        setPhoneDisplay(formattedPhone);
+        
+        // Vérifier que hire_date existe et est valide
+        const hireDate = editingTeacher.hire_date ? dayjs(editingTeacher.hire_date) : null;
+        
+        // Réinitialiser d'abord pour éviter les conflits avec initialValues
+        form.resetFields();
+        
+        // Puis définir toutes les valeurs avec un délai pour s'assurer que resetFields est terminé
+        setTimeout(() => {
+          const formValues: any = {
+            firstName: editingTeacher.first_name || '',
+            lastName: editingTeacher.last_name || '',
+            email: editingTeacher.email || '',
+            phone: phoneValue || '',
+            contractType: editingTeacher.contract_type || 'CDI',
+            hireDate: hireDate && hireDate.isValid() ? hireDate : null,
+            specialties: specialties.length > 0 ? specialties.map((s: string) => ({ value: s })) : [],
+            qualifications: qualifications.length > 0 ? qualifications.map((q: string) => ({ value: q })) : [],
+          };
+          
+          // Définir les valeurs une par une pour forcer la mise à jour
+          Object.keys(formValues).forEach((key) => {
+            form.setFieldValue(key, formValues[key]);
+          });
+        }, 50);
+      }, 150);
+
+      return () => clearTimeout(timer);
+    } else if (!isModalOpen) {
+      // Réinitialiser le formulaire quand le modal se ferme
+      setPhoneDisplay('');
+      form.resetFields();
+    }
+  }, [isModalOpen, editingTeacher, form]);
+
+  // Fetch teachers
+  const { data: teachersData, isLoading } = useQuery({
+    queryKey: ['teachers', pagination.current, pagination.pageSize, searchText, contractTypeFilter],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        page: pagination.current.toString(),
+        limit: pagination.pageSize.toString(),
+      });
+      if (searchText) params.append('search', searchText);
+      if (contractTypeFilter) params.append('contractType', contractTypeFilter);
+
+      const response = await api.get(`/teachers?${params.toString()}`);
+      // Debug: log to check if user_id is present
+      console.log('Teachers data:', response.data);
+      if (response.data?.teachers) {
+        console.log('First teacher user_id:', response.data.teachers[0]?.user_id);
+      }
+      return response.data;
+    },
+  });
+
+  // Create teacher mutation
+  const createMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const response = await api.post('/teachers', data);
+      return response.data;
+    },
+    onSuccess: () => {
+      message.success('Enseignant créé avec succès !');
+      setIsModalOpen(false);
+      form.resetFields();
+      setEditingTeacher(null);
+      queryClient.invalidateQueries({ queryKey: ['teachers'] });
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.error || 'Erreur lors de la création de l\'enseignant');
+    },
+  });
+
+  // Update teacher mutation
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const response = await api.patch(`/teachers/${id}`, data);
+      return response.data;
+    },
+    onSuccess: () => {
+      message.success('Enseignant modifié avec succès !');
+      setIsModalOpen(false);
+      form.resetFields();
+      setEditingTeacher(null);
+      queryClient.invalidateQueries({ queryKey: ['teachers'] });
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.error || 'Erreur lors de la modification de l\'enseignant');
+    },
+  });
+
+  // Delete teacher mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await api.delete(`/teachers/${id}`);
+      return response.data;
+    },
+    onSuccess: () => {
+      message.success('Enseignant supprimé avec succès !');
+      queryClient.invalidateQueries({ queryKey: ['teachers'] });
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.error || 'Erreur lors de la suppression de l\'enseignant');
+    },
+  });
+
+  // Create user account mutation
+  const createAccountMutation = useMutation({
+    mutationFn: async ({ teacherId, password }: { teacherId: string; password?: string }) => {
+      const response = await api.post(`/teachers/${teacherId}/create-account`, { password });
+      return response.data;
+    },
+    onSuccess: (data) => {
+      setAccountCredentials(data.data);
+      setIsAccountModalOpen(true);
+      queryClient.invalidateQueries({ queryKey: ['teachers'] });
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.error || 'Erreur lors de la création du compte');
+    },
+  });
+
+  const handleCreateAccount = (teacher: any) => {
+    if (teacher.user_id) {
+      message.warning('Cet enseignant a déjà un compte utilisateur');
+      return;
+    }
+    createAccountMutation.mutate({ teacherId: teacher.id });
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    message.success('Copié dans le presse-papiers !');
+  };
+
+  const handleSubmit = async () => {
+    try {
+      // Valider tous les champs, y compris specialties et qualifications
+      const values = await form.validateFields(['firstName', 'lastName', 'email', 'phone', 'contractType', 'hireDate', 'specialties', 'qualifications']);
+      
+      // Validation supplémentaire pour s'assurer que specialties et qualifications sont des tableaux valides
+      const specialties = Array.isArray(values.specialties) ? values.specialties : [];
+      const qualifications = Array.isArray(values.qualifications) ? values.qualifications : [];
+      
+      if (specialties.length === 0) {
+        message.error('Veuillez ajouter au moins une spécialité');
+        form.setFields([{ name: 'specialties', errors: ['Veuillez ajouter au moins une spécialité'] }]);
+        return;
+      }
+      
+      if (qualifications.length === 0) {
+        message.error('Veuillez ajouter au moins une qualification');
+        form.setFields([{ name: 'qualifications', errors: ['Veuillez ajouter au moins une qualification'] }]);
+        return;
+      }
+      
+      // Extraire les valeurs des objets { value: string }
+      const specialtyValues = specialties.map((s: any) => s?.value || s).filter(Boolean);
+      const qualificationValues = qualifications.map((q: any) => q?.value || q).filter(Boolean);
+      
+      // Vérifier que tous les éléments sont valides (non vides, pas de doublons, longueur minimale)
+      const invalidSpecialties = specialtyValues.filter((s: string) => !s || !s.trim() || s.trim().length < 2);
+      if (invalidSpecialties.length > 0) {
+        message.error('Veuillez corriger les spécialités invalides');
+        form.setFields([{ name: 'specialties', errors: ['Certaines spécialités sont invalides'] }]);
+        return;
+      }
+      
+      const invalidQualifications = qualificationValues.filter((q: string) => !q || !q.trim() || q.trim().length < 2);
+      if (invalidQualifications.length > 0) {
+        message.error('Veuillez corriger les qualifications invalides');
+        form.setFields([{ name: 'qualifications', errors: ['Certaines qualifications sont invalides'] }]);
+        return;
+      }
+      
+      const data = {
+        firstName: values.firstName,
+        lastName: values.lastName,
+        email: values.email,
+        phone: values.phone,
+        contractType: values.contractType,
+        hireDate: values.hireDate.format('YYYY-MM-DD'),
+        specialties: specialtyValues.map((s: string) => s.trim()).join(', '),
+        qualifications: qualificationValues.map((q: string) => q.trim()).join(', '),
+      };
+
+      if (editingTeacher) {
+        updateMutation.mutate({ id: editingTeacher.id, data });
+      } else {
+        createMutation.mutate(data);
+      }
+    } catch (error: any) {
+      console.error('Validation error:', error);
+      if (error.errorFields) {
+        const errorMessages = error.errorFields.map((field: any) => {
+          const fieldName = Array.isArray(field.name) ? field.name[0] : field.name;
+          return `${fieldName}: ${Array.isArray(field.errors) ? field.errors[0] : field.errors}`;
+        });
+        message.error(`Erreurs de validation: ${errorMessages.join(', ')}`);
+      } else {
+        message.error('Erreur lors de la validation du formulaire');
+      }
+    }
+  };
+
+
+  const handleView = (teacher: any) => {
+    setViewingTeacher(teacher);
+    setIsViewModalOpen(true);
+  };
+
+  const handleEdit = (teacher: any) => {
+    setEditingTeacher(teacher);
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = (id: string) => {
+    deleteMutation.mutate(id);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingTeacher(null);
+    setPhoneDisplay('');
+    form.resetFields();
+  };
+
+  const columns = [
+    {
+      title: 'Prénom',
+      dataIndex: 'first_name',
+      key: 'first_name',
+      width: 150,
+      render: (text: string) => <strong style={{ fontSize: '15px', color: '#1a1a1a' }}>{text}</strong>,
+    },
+    {
+      title: 'Nom',
+      dataIndex: 'last_name',
+      key: 'last_name',
+      width: 150,
+      render: (text: string) => <strong style={{ fontSize: '15px', color: '#1a1a1a' }}>{text}</strong>,
+    },
+    {
+      title: 'Email',
+      dataIndex: 'email',
+      key: 'email',
+      width: 200,
+    },
+    {
+      title: 'Téléphone',
+      dataIndex: 'phone',
+      key: 'phone',
+      width: 150,
+    },
+    {
+      title: 'Type de contrat',
+      dataIndex: 'contract_type',
+      key: 'contract_type',
+      width: 150,
+      align: 'center' as const,
+      render: (type: string) => {
+        const colors: any = {
+          CDI: 'green',
+          CDD: 'orange',
+          VACATAIRE: 'blue',
+        };
+        return (
+          <Tag 
+            color={colors[type]}
+            className="modern-badge"
+            style={{
+              background: type === 'CDI' 
+                ? 'linear-gradient(135deg, rgba(82, 196, 26, 0.1) 0%, rgba(82, 196, 26, 0.05) 100%)'
+                : type === 'CDD'
+                ? 'linear-gradient(135deg, rgba(255, 152, 0, 0.1) 0%, rgba(255, 152, 0, 0.05) 100%)'
+                : 'linear-gradient(135deg, rgba(24, 144, 255, 0.1) 0%, rgba(24, 144, 255, 0.05) 100%)',
+              border: type === 'CDI'
+                ? '1px solid rgba(82, 196, 26, 0.3)'
+                : type === 'CDD'
+                ? '1px solid rgba(255, 152, 0, 0.3)'
+                : '1px solid rgba(24, 144, 255, 0.3)',
+              color: type === 'CDI' ? '#52c41a' : type === 'CDD' ? '#fa8c16' : '#1890ff',
+              fontWeight: 500,
+            }}
+          >
+            {type}
+          </Tag>
+        );
+      },
+    },
+    {
+      title: 'Date d\'embauche',
+      dataIndex: 'hire_date',
+      key: 'hire_date',
+      width: 150,
+      align: 'center' as const,
+      render: (date: string) => <strong>{dayjs(date).format('DD/MM/YYYY')}</strong>,
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      width: 180,
+      align: 'center' as const,
+      render: (_: any, record: any) => {
+        // Debug: log to check user_id value
+        console.log('Teacher record:', record.id, 'user_id:', record.user_id, 'has user_id?', !!record.user_id, 'full record:', record);
+        // Temporarily show button for all teachers to test visibility
+        const shouldShowButton = !record.user_id;
+        console.log('Should show button?', shouldShowButton);
+        return (
+          <Space>
+            {shouldShowButton && (
+              <Button
+                type="link"
+                size="small"
+                icon={<UserAddOutlined />}
+                onClick={() => handleCreateAccount(record)}
+                loading={createAccountMutation.isPending}
+                style={{ 
+                  padding: '4px',
+                  color: 'rgb(var(--role-primary))',
+                }}
+                title="Créer un compte"
+                className="hover:bg-green-50"
+              >
+                Créer compte
+              </Button>
+            )}
+          <Button
+            type="link"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => handleEdit(record)}
+            style={{ 
+              padding: '4px',
+              color: '#1890ff',
+            }}
+            title="Modifier"
+            className="hover:bg-blue-50"
+          />
+          <Popconfirm
+            title="Supprimer cet enseignant ?"
+            description="Cette action est irréversible."
+            onConfirm={() => handleDelete(record.id)}
+            okText="Supprimer"
+            cancelText="Annuler"
+            okButtonProps={{ 
+              danger: true,
+              className: 'modern-button-primary',
+            }}
+          >
+            <Button
+              type="link"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              style={{ 
+                padding: '4px',
+                color: '#ff4d4f',
+              }}
+              title="Supprimer"
+              className="hover:bg-red-50"
+            />
+          </Popconfirm>
+        </Space>
+        );
+      },
+    },
+  ];
+
+  return (
+    <div className="animate-fade-in mx-auto max-w-7xl space-y-8">
+      <PageHeader
+        title="Enseignants"
+        description="Gestion des enseignants et de leurs informations"
+        action={
+          <Button
+            type="primary"
+            icon={<Plus className="h-4 w-4" aria-hidden="true" />}
+            onClick={() => {
+              setPhoneDisplay('');
+              setIsModalOpen(true);
+            }}
+            size="large"
+          >
+            Nouvel Enseignant
+          </Button>
+        }
+      />
+
+      <GlassCard variant="glass" styles={{ body: { padding: '24px' } }}>
+        <Row gutter={16} style={{ marginBottom: 16 }}>
+          <Col span={12}>
+            <Input
+              placeholder="Rechercher par nom, prénom ou email..."
+              prefix={<Search className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
+              value={searchText}
+              onChange={(e) => {
+                setSearchText(e.target.value);
+                setPagination({ ...pagination, current: 1 });
+              }}
+              allowClear
+            />
+          </Col>
+          <Col span={6}>
+            <Select
+              placeholder="Type de contrat"
+              value={contractTypeFilter || undefined}
+              onChange={(value) => {
+                setContractTypeFilter(value);
+                setPagination({ ...pagination, current: 1 });
+              }}
+              allowClear
+              style={{ width: '100%' }}
+            >
+              <Select.Option value="CDI">CDI</Select.Option>
+              <Select.Option value="CDD">CDD</Select.Option>
+              <Select.Option value="VACATAIRE">Vacataire</Select.Option>
+            </Select>
+          </Col>
+        </Row>
+
+        {isLoading ? (
+          <div className="flex justify-center py-16">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          </div>
+        ) : teachersData?.data && teachersData.data.length > 0 ? (
+          <>
+            <Row gutter={[24, 24]}>
+              {teachersData.data.map((teacher: TeacherCardProps['teacher']) => (
+                <TeacherCard
+                  key={teacher.id}
+                  teacher={teacher}
+                  onView={() => handleView(teacher)}
+                  onEdit={() => handleEdit(teacher)}
+                  onDelete={() => handleDelete(teacher.id as string)}
+                  onCreateAccount={() => handleCreateAccount(teacher)}
+                  isCreatingAccount={createAccountMutation.isPending}
+                />
+              ))}
+            </Row>
+
+            <div className="mt-6 flex justify-center">
+              <Space>
+                <Button
+                  disabled={pagination.current === 1}
+                  onClick={() => setPagination({ ...pagination, current: pagination.current - 1 })}
+                >
+                  Précédent
+                </Button>
+                <span className="px-4 text-muted-foreground">
+                  Page {pagination.current} sur {Math.ceil((teachersData?.total || 0) / pagination.pageSize)}
+                </span>
+                <Button
+                  disabled={pagination.current >= Math.ceil((teachersData?.total || 0) / pagination.pageSize)}
+                  onClick={() => setPagination({ ...pagination, current: pagination.current + 1 })}
+                >
+                  Suivant
+                </Button>
+                <Select
+                  value={pagination.pageSize}
+                  onChange={(value) => setPagination({ current: 1, pageSize: value })}
+                  style={{ width: 120 }}
+                >
+                  <Select.Option value={12}>12 / page</Select.Option>
+                  <Select.Option value={24}>24 / page</Select.Option>
+                  <Select.Option value={48}>48 / page</Select.Option>
+                </Select>
+              </Space>
+            </div>
+          </>
+        ) : (
+          <EmptyState
+            icon={User}
+            title={teachersData === undefined && !isLoading ? 'Aucune donnée disponible' : 'Aucun enseignant trouvé'}
+            description="Ajoutez un enseignant ou modifiez vos filtres de recherche."
+            actionLabel="Nouvel enseignant"
+            onAction={() => {
+              setPhoneDisplay('');
+              setIsModalOpen(true);
+            }}
+          />
+        )}
+      </GlassCard>
+
+      {/* Modal */}
+      <Modal
+        className="modern-modal"
+        title={
+          <Space>
+            <UserOutlined style={{ 
+              color: 'rgb(var(--role-primary))',
+              background: 'var(--role-gradient)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }} />
+            <span>{editingTeacher ? 'Modifier l\'Enseignant' : 'Nouvel Enseignant'}</span>
+          </Space>
+        }
+        open={isModalOpen}
+        onOk={handleSubmit}
+        onCancel={handleCloseModal}
+        confirmLoading={createMutation.isPending || updateMutation.isPending}
+        okText={editingTeacher ? 'Modifier' : 'Créer'}
+        cancelText="Annuler"
+        width={700}
+        okButtonProps={{
+          className: 'modern-button-primary',
+        }}
+        cancelButtonProps={{
+          className: 'modern-button-secondary-outline',
+        }}
+      >
+        <Form
+          form={form}
+          layout="vertical"
+          style={{ marginTop: '24px' }}
+          initialValues={{
+            contractType: 'CDI',
+            specialties: [],
+            qualifications: [],
+          }}
+        >
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="firstName"
+                label={<span style={{ fontWeight: 500 }}>Prénom</span>}
+                rules={[{ required: true, message: 'Veuillez saisir le prénom' }]}
+              >
+                <div className="modern-input-wrapper">
+                  <Input placeholder="Prénom" style={{ borderRadius: '8px' }} />
+                </div>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="lastName"
+                label={<span style={{ fontWeight: 500 }}>Nom</span>}
+                rules={[{ required: true, message: 'Veuillez saisir le nom' }]}
+              >
+                <div className="modern-input-wrapper">
+                  <Input placeholder="Nom" style={{ borderRadius: '8px' }} />
+                </div>
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="email"
+                label={<span style={{ fontWeight: 500 }}>Email</span>}
+                rules={[
+                  { required: true, message: 'Veuillez saisir l\'email' },
+                  { type: 'email', message: 'Email invalide' },
+                ]}
+              >
+                <div className="modern-input-wrapper">
+                  <Input placeholder="email@example.com" style={{ borderRadius: '8px' }} />
+                </div>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="phone"
+                label={<span style={{ fontWeight: 500 }}>Téléphone</span>}
+                rules={[
+                  { required: true, message: 'Téléphone requis' },
+                  { 
+                    validator: (_: any, value: string) => {
+                      if (!value) {
+                        return Promise.reject(new Error('Téléphone requis'));
+                      }
+                      // Remove +225 prefix and spaces for validation
+                      const numberOnly = value.replace(/^\+225\s*/, '').replace(/\s/g, '');
+                      if (numberOnly.length < 10) {
+                        return Promise.reject(new Error('Le numéro doit contenir au moins 10 chiffres'));
+                      }
+                      if (numberOnly.length > 10) {
+                        return Promise.reject(new Error('Le numéro ne doit pas dépasser 10 chiffres'));
+                      }
+                      if (!/^\d+$/.test(numberOnly)) {
+                        return Promise.reject(new Error('Le numéro ne doit contenir que des chiffres'));
+                      }
+                      return Promise.resolve();
+                    },
+                  },
+                ]}
+                normalize={(value: string) => {
+                  if (!value) return '';
+                  // Remove +225 if user types it manually
+                  let cleaned = value.replace(/^\+225\s*/, '').trim();
+                  // Remove all non-digit characters (including spaces)
+                  cleaned = cleaned.replace(/\D/g, '');
+                  // Limit to 10 digits
+                  cleaned = cleaned.substring(0, 10);
+                  // Format: +225 + 10 digits (without spaces in storage)
+                  return cleaned ? `+225${cleaned}` : '';
+                }}
+                getValueProps={(value) => {
+                  if (!value) {
+                    // Use setTimeout to avoid setState during render
+                    setTimeout(() => setPhoneDisplay(''), 0);
+                    return { value: '' };
+                  }
+                  // Remove +225 prefix and format with spaces for display
+                  let numberOnly = value.replace(/^\+225\s*/, '').replace(/\s/g, '');
+                  // Format as XX XX XX XX XX
+                  let formatted = '';
+                  if (numberOnly.length > 0) {
+                    formatted = numberOnly.match(/.{1,2}/g)?.join(' ') || numberOnly;
+                  }
+                  // Use setTimeout to avoid setState during render
+                  setTimeout(() => setPhoneDisplay(formatted), 0);
+                  return { value: formatted };
+                }}
+              >
+                <div className="modern-input-wrapper">
+                  <Input
+                    addonBefore="+225"
+                    placeholder="XX XX XX XX XX"
+                    style={{ borderRadius: '8px' }}
+                    maxLength={14}
+                    value={phoneDisplay}
+                    onChange={(e) => {
+                      const inputValue = e.target.value;
+                      // Remove all non-digit characters
+                      let digitsOnly = inputValue.replace(/\D/g, '');
+                      // Limit to 10 digits
+                      digitsOnly = digitsOnly.substring(0, 10);
+                      
+                      // Format with spaces: XX XX XX XX XX (space after every 2 digits)
+                      let formatted = '';
+                      for (let i = 0; i < digitsOnly.length; i++) {
+                        if (i > 0 && i % 2 === 0) {
+                          formatted += ' ';
+                        }
+                        formatted += digitsOnly[i];
+                      }
+                      
+                      // Update display state
+                      setPhoneDisplay(formatted);
+                      
+                      // Update form value with +225 prefix (without spaces for storage)
+                      form.setFieldsValue({ phone: digitsOnly ? `+225${digitsOnly}` : '' });
+                    }}
+                    onKeyPress={(e) => {
+                      // Only allow digits
+                      if (!/[0-9]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete' && e.key !== 'Tab' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End') {
+                        e.preventDefault();
+                      }
+                    }}
+                  />
+                </div>
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="contractType"
+                label={<span style={{ fontWeight: 500 }}>Type de contrat</span>}
+                rules={[{ required: true, message: 'Veuillez sélectionner le type de contrat' }]}
+              >
+                <Select 
+                  placeholder="Sélectionnez le type de contrat"
+                  style={{ borderRadius: '8px' }}
+                  className="modern-select"
+                >
+                  <Select.Option value="CDI">CDI (Permanent)</Select.Option>
+                  <Select.Option value="CDD">CDD (Temporaire)</Select.Option>
+                  <Select.Option value="VACATAIRE">Vacataire</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="hireDate"
+                label={<span style={{ fontWeight: 500 }}>Date d'embauche</span>}
+                rules={[{ required: true, message: 'Veuillez sélectionner la date d\'embauche' }]}
+              >
+                <DatePicker 
+                  style={{ width: '100%', borderRadius: '8px' }} 
+                  format="DD/MM/YYYY"
+                  className="modern-date-picker"
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item
+            name="specialties"
+            label={<span style={{ fontWeight: 500 }}>Spécialités</span>}
+            rules={[
+              { required: true, message: 'Veuillez ajouter au moins une spécialité' },
+              {
+                validator: (_: any, value: any) => {
+                  if (!value || (Array.isArray(value) && value.length === 0)) {
+                    return Promise.reject(new Error('Veuillez ajouter au moins une spécialité'));
+                  }
+                  
+                  // Vérifier que tous les éléments sont valides
+                  if (Array.isArray(value)) {
+                    // Vérifier qu'il n'y a pas d'éléments vides
+                    const emptyItems = value.filter((item: any) => !item?.value || !item.value.trim());
+                    if (emptyItems.length > 0) {
+                      return Promise.reject(new Error('Certaines spécialités sont vides. Veuillez les supprimer ou les compléter'));
+                    }
+                    
+                    // Vérifier les doublons
+                    const lowercased = value.map((item: any) => item?.value?.trim().toLowerCase()).filter(Boolean);
+                    const duplicates = lowercased.filter((item: string, index: number) => lowercased.indexOf(item) !== index);
+                    if (duplicates.length > 0) {
+                      return Promise.reject(new Error('Certaines spécialités sont en double. Veuillez les supprimer'));
+                    }
+                    
+                    // Vérifier la longueur minimale de chaque élément
+                    const shortItems = value.filter((item: any) => item?.value?.trim().length < 2);
+                    if (shortItems.length > 0) {
+                      return Promise.reject(new Error('Certaines spécialités sont trop courtes (minimum 2 caractères)'));
+                    }
+                  }
+                  
+                  return Promise.resolve();
+                },
+              },
+            ]}
+          >
+            <Form.List name="specialties">
+              {(fields, { add, remove }) => (
+                <>
+                  {fields.map(({ key, name, ...restField }) => (
+                    <Space key={key} style={{ display: 'flex', marginBottom: 8, width: '100%' }} align="baseline">
+                      <Form.Item
+                        {...restField}
+                        name={[name, 'value']}
+                        rules={[
+                          { required: true, message: 'Spécialité requise' },
+                          { min: 2, message: 'Minimum 2 caractères' },
+                        ]}
+                        style={{ flex: 1, marginBottom: 0 }}
+                      >
+                        <Input 
+                          placeholder="Ex: Mathématiques, Informatique..." 
+                          style={{ borderRadius: '8px' }}
+                          className="modern-input-wrapper"
+                        />
+                      </Form.Item>
+                      <Button
+                        type="text"
+                        danger
+                        icon={<MinusCircleOutlined />}
+                        onClick={() => remove(name)}
+                        style={{ marginBottom: 0 }}
+                      />
+                    </Space>
+                  ))}
+                  <Form.Item style={{ marginBottom: 0 }}>
+                    <Button
+                      type="dashed"
+                      onClick={() => add()}
+                      block
+                      icon={<PlusOutlined />}
+                      style={{
+                        borderColor: '#E96702',
+                        color: '#E96702',
+                        borderRadius: '8px',
+                        transition: 'all 0.3s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(233, 103, 2, 0.08)';
+                        e.currentTarget.style.borderColor = '#d15a02';
+                        e.currentTarget.style.color = '#d15a02';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.borderColor = '#E96702';
+                        e.currentTarget.style.color = '#E96702';
+                      }}
+                    >
+                      Ajouter une spécialité
+                    </Button>
+                  </Form.Item>
+                </>
+              )}
+            </Form.List>
+          </Form.Item>
+
+          <Form.Item
+            name="qualifications"
+            label={<span style={{ fontWeight: 500 }}>Qualifications</span>}
+            rules={[
+              { required: true, message: 'Veuillez ajouter au moins une qualification' },
+              {
+                validator: (_: any, value: any) => {
+                  if (!value || (Array.isArray(value) && value.length === 0)) {
+                    return Promise.reject(new Error('Veuillez ajouter au moins une qualification'));
+                  }
+                  
+                  // Vérifier que tous les éléments sont valides
+                  if (Array.isArray(value)) {
+                    // Vérifier qu'il n'y a pas d'éléments vides
+                    const emptyItems = value.filter((item: any) => !item?.value || !item.value.trim());
+                    if (emptyItems.length > 0) {
+                      return Promise.reject(new Error('Certaines qualifications sont vides. Veuillez les supprimer ou les compléter'));
+                    }
+                    
+                    // Vérifier les doublons
+                    const lowercased = value.map((item: any) => item?.value?.trim().toLowerCase()).filter(Boolean);
+                    const duplicates = lowercased.filter((item: string, index: number) => lowercased.indexOf(item) !== index);
+                    if (duplicates.length > 0) {
+                      return Promise.reject(new Error('Certaines qualifications sont en double. Veuillez les supprimer'));
+                    }
+                    
+                    // Vérifier la longueur minimale de chaque élément
+                    const shortItems = value.filter((item: any) => item?.value?.trim().length < 2);
+                    if (shortItems.length > 0) {
+                      return Promise.reject(new Error('Certaines qualifications sont trop courtes (minimum 2 caractères)'));
+                    }
+                  }
+                  
+                  return Promise.resolve();
+                },
+              },
+            ]}
+          >
+            <Form.List name="qualifications">
+              {(fields, { add, remove }) => (
+                <>
+                  {fields.map(({ key, name, ...restField }) => (
+                    <Space key={key} style={{ display: 'flex', marginBottom: 8, width: '100%' }} align="baseline">
+                      <Form.Item
+                        {...restField}
+                        name={[name, 'value']}
+                        rules={[
+                          { required: true, message: 'Qualification requise' },
+                          { min: 2, message: 'Minimum 2 caractères' },
+                        ]}
+                        style={{ flex: 1, marginBottom: 0 }}
+                      >
+                        <Input 
+                          placeholder="Ex: Master en Informatique, PhD..." 
+                          style={{ borderRadius: '8px' }}
+                          className="modern-input-wrapper"
+                        />
+                      </Form.Item>
+                      <Button
+                        type="text"
+                        danger
+                        icon={<MinusCircleOutlined />}
+                        onClick={() => remove(name)}
+                        style={{ marginBottom: 0 }}
+                      />
+                    </Space>
+                  ))}
+                  <Form.Item style={{ marginBottom: 0 }}>
+                    <Button
+                      type="dashed"
+                      onClick={() => add()}
+                      block
+                      icon={<PlusOutlined />}
+                      style={{
+                        borderColor: '#E96702',
+                        color: '#E96702',
+                        borderRadius: '8px',
+                        transition: 'all 0.3s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(233, 103, 2, 0.08)';
+                        e.currentTarget.style.borderColor = '#d15a02';
+                        e.currentTarget.style.color = '#d15a02';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.borderColor = '#E96702';
+                        e.currentTarget.style.color = '#E96702';
+                      }}
+                    >
+                      Ajouter une qualification
+                    </Button>
+                  </Form.Item>
+                </>
+              )}
+            </Form.List>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Modal de visualisation des détails */}
+      <Modal
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <UserOutlined style={{ fontSize: '20px', color: '#52c41a' }} />
+            <span>Détails de l'enseignant</span>
+          </div>
+        }
+        open={isViewModalOpen}
+        onCancel={() => {
+          setIsViewModalOpen(false);
+          setViewingTeacher(null);
+          setViewModalActiveTab('info');
+        }}
+        footer={[
+          <Button
+            key="close"
+            onClick={() => {
+              setIsViewModalOpen(false);
+              setViewingTeacher(null);
+            }}
+          >
+            Fermer
+          </Button>,
+        ]}
+        width={900}
+        style={{ top: 20 }}
+      >
+        {viewingTeacher && (
+          <div style={{ padding: '8px 0' }}>
+            <Tabs
+              activeKey={viewModalActiveTab}
+              onChange={setViewModalActiveTab}
+              items={[
+                {
+                  key: 'info',
+                  label: (
+                    <span>
+                      <UserOutlined style={{ marginRight: '8px' }} />
+                      Informations
+                    </span>
+                  ),
+                  children: (
+                    <div>
+                      {/* Informations personnelles */}
+                      <div style={{ marginBottom: '24px' }}>
+                        <Title level={5} style={{ marginBottom: '16px', color: '#1a1a1a' }}>
+                          Informations personnelles
+                        </Title>
+              <Row gutter={[16, 16]}>
+                <Col span={12}>
+                  <div style={{ marginBottom: '12px' }}>
+                    <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '4px' }}>Prénom</div>
+                    <div style={{ fontSize: '15px', fontWeight: 500, color: '#1a1a1a' }}>
+                      {viewingTeacher.first_name}
+                    </div>
+                  </div>
+                </Col>
+                <Col span={12}>
+                  <div style={{ marginBottom: '12px' }}>
+                    <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '4px' }}>Nom</div>
+                    <div style={{ fontSize: '15px', fontWeight: 500, color: '#1a1a1a' }}>
+                      {viewingTeacher.last_name}
+                    </div>
+                  </div>
+                </Col>
+                <Col span={12}>
+                  <div style={{ marginBottom: '12px' }}>
+                    <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '4px' }}>Email</div>
+                    <div style={{ fontSize: '15px', color: '#1a1a1a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <MailOutlined style={{ color: 'rgb(var(--role-primary))' }} />
+                      {viewingTeacher.email}
+                    </div>
+                  </div>
+                </Col>
+                <Col span={12}>
+                  <div style={{ marginBottom: '12px' }}>
+                    <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '4px' }}>Téléphone</div>
+                    <div style={{ fontSize: '15px', color: '#1a1a1a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <PhoneOutlined style={{ color: 'rgb(var(--role-primary))' }} />
+                      {viewingTeacher.phone}
+                    </div>
+                  </div>
+                </Col>
+                <Col span={12}>
+                  <div style={{ marginBottom: '12px' }}>
+                    <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '4px' }}>Type de contrat</div>
+                    <div>
+                      <Tag
+                        style={{
+                          background: viewingTeacher.contract_type === 'CDI' 
+                            ? 'linear-gradient(135deg, rgba(82, 196, 26, 0.1) 0%, rgba(82, 196, 26, 0.05) 100%)'
+                            : viewingTeacher.contract_type === 'CDD'
+                            ? 'linear-gradient(135deg, rgba(255, 152, 0, 0.1) 0%, rgba(255, 152, 0, 0.05) 100%)'
+                            : 'linear-gradient(135deg, rgba(24, 144, 255, 0.1) 0%, rgba(24, 144, 255, 0.05) 100%)',
+                          border: viewingTeacher.contract_type === 'CDI'
+                            ? '1px solid rgba(82, 196, 26, 0.3)'
+                            : viewingTeacher.contract_type === 'CDD'
+                            ? '1px solid rgba(255, 152, 0, 0.3)'
+                            : '1px solid rgba(24, 144, 255, 0.3)',
+                          color: viewingTeacher.contract_type === 'CDI'
+                            ? '#52c41a'
+                            : viewingTeacher.contract_type === 'CDD'
+                            ? '#fa8c16'
+                            : '#1890ff',
+                          borderRadius: '6px',
+                          fontSize: '13px',
+                          fontWeight: 500,
+                          margin: 0,
+                          padding: '4px 12px',
+                        }}
+                      >
+                        {viewingTeacher.contract_type}
+                      </Tag>
+                    </div>
+                  </div>
+                </Col>
+                <Col span={12}>
+                  <div style={{ marginBottom: '12px' }}>
+                    <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '4px' }}>Date d'embauche</div>
+                    <div style={{ fontSize: '15px', color: '#1a1a1a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <CalendarOutlined style={{ color: 'rgb(var(--role-primary))' }} />
+                      {dayjs(viewingTeacher.hire_date).format('DD/MM/YYYY')}
+                    </div>
+                  </div>
+                </Col>
+              </Row>
+            </div>
+
+            {/* Spécialités */}
+            {(() => {
+              const specialties = viewingTeacher.specialties 
+                ? (typeof viewingTeacher.specialties === 'string' 
+                    ? viewingTeacher.specialties.split(',').map((s: string) => s.trim()).filter((s: string) => s)
+                    : Array.isArray(viewingTeacher.specialties) ? viewingTeacher.specialties : [])
+                : [];
+              
+              return specialties.length > 0 ? (
+                <div style={{ marginBottom: '24px' }}>
+                  <Title level={5} style={{ marginBottom: '16px', color: '#1a1a1a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <BookOutlined style={{ color: 'rgb(var(--role-primary))' }} />
+                    Spécialités
+                  </Title>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {specialties.map((specialty: string, index: number) => (
+                      <Tag
+                        key={index}
+                        style={{
+                          background: 'linear-gradient(135deg, rgba(36, 174, 106, 0.1) 0%, rgba(36, 174, 106, 0.05) 100%)',
+                          border: '1px solid rgba(36, 174, 106, 0.3)',
+                          color: 'rgb(var(--role-primary))',
+                          borderRadius: '6px',
+                          fontSize: '13px',
+                          margin: 0,
+                          padding: '4px 12px',
+                        }}
+                      >
+                        {specialty}
+                      </Tag>
+                    ))}
+                  </div>
+                </div>
+              ) : null;
+            })()}
+
+            {/* Qualifications */}
+            {(() => {
+              const qualifications = viewingTeacher.qualifications
+                ? (typeof viewingTeacher.qualifications === 'string'
+                    ? viewingTeacher.qualifications.split(',').map((q: string) => q.trim()).filter((q: string) => q)
+                    : Array.isArray(viewingTeacher.qualifications) ? viewingTeacher.qualifications : [])
+                : [];
+              
+              return qualifications.length > 0 ? (
+                <div style={{ marginBottom: '24px' }}>
+                  <Title level={5} style={{ marginBottom: '16px', color: '#1a1a1a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <TrophyOutlined style={{ color: 'rgb(var(--role-primary))' }} />
+                    Qualifications
+                  </Title>
+                  <div style={{ 
+                    background: '#fafafa', 
+                    padding: '16px', 
+                    borderRadius: '8px',
+                    border: '1px solid #f0f0f0',
+                  }}>
+                    {qualifications.map((qualification: string, index: number) => (
+                      <div
+                        key={index}
+                        style={{
+                          padding: '8px 0',
+                          borderBottom: index < qualifications.length - 1 ? '1px solid #f0f0f0' : 'none',
+                          fontSize: '14px',
+                          color: '#1a1a1a',
+                          lineHeight: '1.6',
+                        }}
+                      >
+                        • {qualification}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null;
+            })()}
+                    </div>
+                  ),
+                },
+                {
+                  key: 'remuneration',
+                  label: (
+                    <span>
+                      <DollarOutlined style={{ marginRight: '8px' }} />
+                      Rémunération
+                    </span>
+                  ),
+                  children: (
+                    <TeacherRemunerationTab teacherId={viewingTeacher.id} />
+                  ),
+                },
+              ]}
+            />
+          </div>
+        )}
+      </Modal>
+
+      {/* Modal pour afficher les identifiants créés */}
+      <Modal
+        title={
+          <Space>
+            <UserAddOutlined style={{ color: 'rgb(var(--role-primary))' }} />
+            <span>Compte créé avec succès</span>
+          </Space>
+        }
+        open={isAccountModalOpen}
+        onCancel={() => {
+          setIsAccountModalOpen(false);
+          setAccountCredentials(null);
+        }}
+        footer={[
+          <Button
+            key="close"
+            type="primary"
+            onClick={() => {
+              setIsAccountModalOpen(false);
+              setAccountCredentials(null);
+            }}
+            className="modern-button-primary"
+          >
+            Fermer
+          </Button>,
+        ]}
+        width={600}
+      >
+        {accountCredentials && (
+          <div style={{ padding: '16px 0' }}>
+            <Alert
+              message="Compte utilisateur créé avec succès !"
+              description="Veuillez noter ces identifiants et les communiquer à l'enseignant."
+              type="success"
+              showIcon
+              style={{ marginBottom: '24px' }}
+            />
+            
+            <div style={{ 
+              background: '#f5f5f5', 
+              padding: '20px', 
+              borderRadius: '8px',
+              marginBottom: '16px',
+            }}>
+              <div style={{ marginBottom: '16px' }}>
+                <Text strong style={{ fontSize: '14px', display: 'block', marginBottom: '8px' }}>
+                  Email :
+                </Text>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px',
+                  background: '#fff',
+                  padding: '8px 12px',
+                  borderRadius: '4px',
+                  border: '1px solid #d9d9d9',
+                }}>
+                  <Text code style={{ flex: 1, fontSize: '14px' }}>
+                    {accountCredentials.user.email}
+                  </Text>
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<CopyOutlined />}
+                    onClick={() => copyToClipboard(accountCredentials.user.email)}
+                    title="Copier"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Text strong style={{ fontSize: '14px', display: 'block', marginBottom: '8px' }}>
+                  Mot de passe :
+                </Text>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px',
+                  background: '#fff',
+                  padding: '8px 12px',
+                  borderRadius: '4px',
+                  border: '1px solid #d9d9d9',
+                }}>
+                  <Text code style={{ flex: 1, fontSize: '14px', color: 'rgb(var(--role-primary))', fontWeight: 'bold' }}>
+                    {accountCredentials.password}
+                  </Text>
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<CopyOutlined />}
+                    onClick={() => copyToClipboard(accountCredentials.password)}
+                    title="Copier"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <Alert
+              message="Important"
+              description="L'enseignant pourra modifier ce mot de passe après sa première connexion."
+              type="info"
+              showIcon
+            />
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+

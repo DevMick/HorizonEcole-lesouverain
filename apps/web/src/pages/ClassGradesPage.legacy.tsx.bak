@@ -1,0 +1,559 @@
+import { useState, useEffect } from 'react';
+import {
+  Typography,
+  Table,
+  Select,
+  Row,
+  Col,
+  Button,
+  App,
+  message,
+  Alert,
+} from 'antd';
+import { BookOpen, Calendar, FileDown, Users } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '../lib/api';
+import dayjs from 'dayjs';
+import { PageHeader } from '../components/ui/page-header';
+import { GlassCard } from '../components/ui/glass-card';
+import { EmptyState } from '../components/ui/empty-state';
+
+const { Text } = Typography;
+
+interface SubjectGrade {
+  subjectId: string;
+  subjectName: string;
+  grades: Array<{
+    evaluationType: string;
+    note: number;
+    maxNote: number;
+    createdAt?: string;
+  }>;
+  average: number;
+}
+
+interface StudentClassGrade {
+  studentId: string;
+  studentName: string;
+  gender: string;
+  subjectGrades: Map<string, SubjectGrade>;
+}
+
+export default function ClassGradesPage() {
+  const { message: messageApi } = App.useApp();
+
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>('');
+  const [selectedSemester, setSelectedSemester] = useState<string>('');
+  const [selectedClass, setSelectedClass] = useState<string>('');
+  const [selectedSubject, setSelectedSubject] = useState<string>('');
+
+  // Fetch academic years
+  const { data: academicYearsData } = useQuery({
+    queryKey: ['academic-years-all'],
+    queryFn: async () => {
+      const response = await api.get('/academic-years');
+      return response.data.data || [];
+    },
+  });
+
+  // Set default academic year to current year only on initial load
+  useEffect(() => {
+    if (academicYearsData && academicYearsData.length > 0 && !selectedAcademicYear) {
+      const currentYear = academicYearsData.find((year: any) => year.isCurrent);
+      if (currentYear) {
+        setSelectedAcademicYear(currentYear.id);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [academicYearsData]);
+
+  // Fetch semesters
+  const { data: semestersData } = useQuery({
+    queryKey: ['semesters', selectedAcademicYear],
+    queryFn: async () => {
+      if (!selectedAcademicYear) return [];
+      const response = await api.get(`/semesters?academicYearId=${selectedAcademicYear}`);
+      return response.data.data || [];
+    },
+    enabled: !!selectedAcademicYear,
+  });
+
+  // Determine active semester based on dates
+  const getActiveSemester = () => {
+    if (!semestersData || semestersData.length === 0) return null;
+    
+    const now = dayjs();
+    const sortedSemesters = [...semestersData].sort((a: any, b: any) => {
+      const dateA = dayjs(a.start_date);
+      const dateB = dayjs(b.start_date);
+      return dateA.isBefore(dateB) ? -1 : 1;
+    });
+
+    for (const semester of sortedSemesters) {
+      const startDate = dayjs(semester.start_date);
+      const endDate = dayjs(semester.end_date);
+      if (now.isAfter(startDate) || now.isSame(startDate, 'day')) {
+        if (now.isBefore(endDate) || now.isSame(endDate, 'day')) {
+          return semester;
+        }
+      }
+    }
+
+    return sortedSemesters[0] || null;
+  };
+
+  const activeSemester = getActiveSemester();
+
+  // Set default semester to active semester only on initial load
+  useEffect(() => {
+    if (activeSemester && !selectedSemester) {
+      setSelectedSemester(activeSemester.id);
+    }
+  }, [activeSemester]);
+
+  // Reset semester when academic year changes
+  useEffect(() => {
+    if (selectedAcademicYear && semestersData) {
+      // Check if current selected semester belongs to the new academic year
+      const semesterExists = semestersData.some((sem: any) => sem.id === selectedSemester);
+      if (!semesterExists) {
+        // Reset to active semester or first available
+        if (activeSemester) {
+          setSelectedSemester(activeSemester.id);
+        } else if (semestersData.length > 0) {
+          setSelectedSemester(semestersData[0].id);
+        } else {
+          setSelectedSemester('');
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAcademicYear, semestersData]);
+
+  // Reset subject when class changes
+  useEffect(() => {
+    setSelectedSubject('');
+  }, [selectedClass]);
+
+  // Fetch classes
+  const { data: classesData } = useQuery({
+    queryKey: ['classes-all'],
+    queryFn: async () => {
+      const response = await api.get('/school-classes');
+      return response.data.data || [];
+    },
+  });
+
+  // Fetch class subjects
+  const { data: classSubjectsData } = useQuery({
+    queryKey: ['class-subjects', selectedClass],
+    queryFn: async () => {
+      if (!selectedClass) return [];
+      const response = await api.get(`/coefficients/class/${selectedClass}`);
+      return response.data.data || [];
+    },
+    enabled: !!selectedClass,
+  });
+
+  // Fetch students in selected class
+  const { data: studentsData } = useQuery({
+    queryKey: ['students-class', selectedClass],
+    queryFn: async () => {
+      if (!selectedClass) return [];
+      const response = await api.get(`/students?classId=${selectedClass}`);
+      return response.data.data || [];
+    },
+    enabled: !!selectedClass,
+  });
+
+  // Fetch all grades for the class, semester, and academic year
+  const { data: gradesData, isLoading: gradesLoading } = useQuery({
+    queryKey: ['class-grades', selectedClass, selectedSemester, selectedAcademicYear],
+    queryFn: async () => {
+      if (!selectedClass || !selectedSemester || !selectedAcademicYear) return [];
+      const response = await api.get(
+        `/grades?classId=${selectedClass}&semesterId=${selectedSemester}&academicYearId=${selectedAcademicYear}`
+      );
+      return response.data.data || [];
+    },
+    enabled: !!selectedClass && !!selectedSemester && !!selectedAcademicYear,
+  });
+
+  // Calculate grades and averages for each student
+  const calculateClassGrades = (): StudentClassGrade[] => {
+    if (!studentsData || !gradesData || !classSubjectsData || studentsData.length === 0) return [];
+
+    const studentGrades: StudentClassGrade[] = [];
+
+    // For each student
+    studentsData.forEach((student: any) => {
+      const subjectGradesMap = new Map<string, SubjectGrade>();
+
+      // For each subject in the class
+      classSubjectsData.forEach((classSubject: any) => {
+        const subjectId = classSubject.subject.id;
+        const subjectName = classSubject.subject.name;
+
+        // Get all grades for this student in this subject
+        const studentSubjectGrades = gradesData.filter((grade: any) => 
+          grade.student_id === student.id && 
+          grade.subject_id === subjectId
+        );
+
+        if (studentSubjectGrades.length === 0) {
+          return;
+        }
+
+        // Prepare grades for calculation
+        const grades = studentSubjectGrades.map((grade: any) => ({
+          evaluationType: grade.evaluationType?.name || 'N/A',
+          note: Number(grade.note),
+          maxNote: grade.max_note || 20,
+          createdAt: grade.created_at || new Date().toISOString(),
+        }));
+
+        // Sort grades by creation date
+        grades.sort((a: { createdAt?: string }, b: { createdAt?: string }) => {
+          const dateA = new Date(a.createdAt || '').getTime();
+          const dateB = new Date(b.createdAt || '').getTime();
+          return dateA - dateB;
+        });
+
+        // Calculate weighted average for this subject
+        let totalWeighted = 0;
+        let totalCoefficients = 0;
+
+        grades.forEach((grade: { note: number; maxNote: number }) => {
+          let normalizedNote: number;
+          let coefficient: number;
+          
+          if (grade.maxNote === 10) {
+            normalizedNote = (grade.note / grade.maxNote) * 20;
+            coefficient = 0.5;
+          } else {
+            normalizedNote = grade.note;
+            coefficient = 1;
+          }
+          
+          totalWeighted += normalizedNote * coefficient;
+          totalCoefficients += coefficient;
+        });
+
+        const average = totalCoefficients > 0 ? totalWeighted / totalCoefficients : 0;
+
+        subjectGradesMap.set(subjectId, {
+          subjectId,
+          subjectName,
+          grades,
+          average: Math.round(average * 100) / 100,
+        });
+      });
+
+      studentGrades.push({
+        studentId: student.id,
+        studentName: `${student.firstName || ''} ${student.lastName || ''}`.trim(),
+        gender: student.gender || '',
+        subjectGrades: subjectGradesMap,
+      });
+    });
+
+    return studentGrades;
+  };
+
+  const studentGrades = calculateClassGrades();
+
+  // Export to PDF by subject
+  const handleExportPDF = async () => {
+    if (!selectedClass || !selectedSemester || !selectedAcademicYear || !selectedSubject) {
+      messageApi.warning('Veuillez sélectionner une classe, un trimestre, une année scolaire et une matière');
+      return;
+    }
+
+    try {
+      const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:4001/api';
+      const pdfUrlEndpoint = `${apiBaseUrl}/grades/class-grades-by-subject/pdf?classId=${selectedClass}&semesterId=${selectedSemester}&academicYearId=${selectedAcademicYear}&subjectId=${selectedSubject}`;
+      
+      const token = localStorage.getItem('token');
+      const response = await fetch(pdfUrlEndpoint, {
+        headers: token ? {
+          'Authorization': `Bearer ${token}`,
+        } : {},
+      });
+      
+      if (response.ok) {
+        // Create blob URL for the PDF
+        const blob = await response.blob();
+        const pdfUrl = window.URL.createObjectURL(blob);
+        
+        // Open PDF in new tab
+        window.open(pdfUrl, '_blank');
+        messageApi.success('PDF généré avec succès !');
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        messageApi.error(errorData.error || 'Erreur lors de la génération du PDF');
+      }
+    } catch (error: any) {
+      console.error('Error generating PDF:', error);
+      messageApi.error('Erreur lors de la génération du PDF');
+    }
+  };
+
+  // Get maximum number of grades for a specific subject
+  const getMaxGradesCountForSubject = (subjectId: string) => {
+    let maxCount = 0;
+    studentGrades.forEach((student) => {
+      const subjectGrade = student.subjectGrades.get(subjectId);
+      if (subjectGrade && subjectGrade.grades.length > maxCount) {
+        maxCount = subjectGrade.grades.length;
+      }
+    });
+    return maxCount;
+  };
+
+  // Build table columns
+  const buildColumns = () => {
+    const baseColumns = [
+      {
+        title: 'Nom et Prénom',
+        key: 'studentName',
+        width: 200,
+        render: (_: any, record: StudentClassGrade) => (
+          <Text strong style={{ fontSize: '15px' }}>{record.studentName}</Text>
+        ),
+      },
+      {
+        title: 'Sexe',
+        key: 'gender',
+        width: 80,
+        render: (_: any, record: StudentClassGrade) => {
+          const gender = record.gender;
+          if (gender === 'M' || gender === 'MALE' || gender === 'Masculin') {
+            return 'M';
+          } else if (gender === 'F' || gender === 'FEMALE' || gender === 'Féminin') {
+            return 'F';
+          }
+          return gender || '-';
+        },
+      },
+    ];
+
+    // Add columns for each subject
+    const subjectColumns: any[] = [];
+    if (classSubjectsData && classSubjectsData.length > 0) {
+      classSubjectsData.forEach((classSubject: any) => {
+        const subjectId = classSubject.subject.id;
+        const subjectName = classSubject.subject.name;
+
+        // Get maximum number of grades for this specific subject
+        const maxGradesForSubject = getMaxGradesCountForSubject(subjectId);
+
+        // Build note columns for this subject
+        const noteColumns: any[] = [];
+        for (let i = 0; i < maxGradesForSubject; i++) {
+          noteColumns.push({
+            title: `Note ${i + 1}`,
+            key: `note_${subjectId}_${i}`,
+            width: 100,
+            align: 'center' as const,
+            render: (_: any, record: StudentClassGrade) => {
+              const subjectGrade = record.subjectGrades.get(subjectId);
+              const grade = subjectGrade?.grades[i];
+              
+              if (!grade) {
+                return <Text type="secondary" style={{ fontStyle: 'italic' }}>-</Text>;
+              }
+              
+              return <Text strong>{grade.note}/{grade.maxNote}</Text>;
+            },
+          });
+        }
+
+        // Add average column for this subject
+        noteColumns.push({
+          title: 'Moy.',
+          key: `avg_${subjectId}`,
+          width: 100,
+          align: 'center' as const,
+          render: (_: any, record: StudentClassGrade) => {
+            const subjectGrade = record.subjectGrades.get(subjectId);
+            if (!subjectGrade || subjectGrade.average === 0) {
+              return <Text type="secondary">-</Text>;
+            }
+            return <Text strong>{subjectGrade.average.toFixed(2)}</Text>;
+          },
+        });
+
+        subjectColumns.push({
+          title: subjectName,
+          key: `subject_${subjectId}`,
+          width: (maxGradesForSubject * 100) + 100,
+          align: 'center' as const,
+          children: noteColumns,
+        });
+      });
+    }
+
+    return [...baseColumns, ...subjectColumns];
+  };
+
+  const columns = buildColumns();
+
+  return (
+    <div className="animate-fade-in mx-auto max-w-7xl space-y-8">
+      <PageHeader
+        title="Notes par Matière"
+        description="Consultez toutes les notes et moyennes des élèves par matière pour une classe"
+      />
+
+      <GlassCard variant="glass" styles={{ body: { padding: '24px' } }}>
+        {activeSemester && (
+          <Alert
+            type="info"
+            showIcon
+            className="mb-4"
+            message={
+              <span>
+                <Calendar className="mr-2 inline h-4 w-4" aria-hidden="true" />
+                <Text strong>Trimestre Actif : {activeSemester.name}</Text>
+                <Text type="secondary" className="ml-3">
+                  ({dayjs(activeSemester.start_date).format('DD/MM/YYYY')} - {dayjs(activeSemester.end_date).format('DD/MM/YYYY')})
+                </Text>
+              </span>
+            }
+          />
+        )}
+
+        <Row gutter={16}>
+          <Col xs={24} sm={12} md={8}>
+            <Text strong className="mb-2 block">Année Scolaire</Text>
+            <Select
+              value={selectedAcademicYear}
+              onChange={setSelectedAcademicYear}
+              placeholder="Sélectionnez une année scolaire"
+              style={{ width: '100%' }}
+              showSearch
+              optionFilterProp="children"
+              allowClear
+            >
+              {academicYearsData?.map((year: any) => (
+                <Select.Option key={year.id} value={year.id}>
+                  {year.name} {year.isCurrent && '(En cours)'}
+                </Select.Option>
+              ))}
+            </Select>
+          </Col>
+          <Col xs={24} sm={12} md={8}>
+            <Text strong className="mb-2 block">Classe</Text>
+            <Select
+              value={selectedClass}
+              onChange={setSelectedClass}
+              placeholder="Sélectionnez une classe"
+              style={{ width: '100%' }}
+              showSearch
+              optionFilterProp="children"
+              allowClear
+            >
+              {classesData?.map((cls: any) => (
+                <Select.Option key={cls.id} value={cls.id}>
+                  {cls.name}
+                </Select.Option>
+              ))}
+            </Select>
+          </Col>
+          <Col xs={24} sm={12} md={8}>
+            <Text strong className="mb-2 block">Trimestre</Text>
+            <Select
+              value={selectedSemester}
+              onChange={setSelectedSemester}
+              placeholder="Sélectionnez un trimestre"
+              style={{ width: '100%' }}
+              showSearch
+              optionFilterProp="children"
+              allowClear
+              disabled={!selectedAcademicYear}
+            >
+              {semestersData?.map((semester: any) => (
+                <Select.Option key={semester.id} value={semester.id}>
+                  {semester.name} {semester.id === activeSemester?.id && '(Actif)'}
+                </Select.Option>
+              ))}
+            </Select>
+          </Col>
+        </Row>
+        {selectedClass && (
+          <Row gutter={16} style={{ marginTop: 16 }}>
+            <Col xs={24} sm={12} md={8}>
+              <Text strong className="mb-2 block">Matière (pour export PDF)</Text>
+              <Select
+                value={selectedSubject}
+                onChange={setSelectedSubject}
+                placeholder="Sélectionnez une matière"
+                style={{ width: '100%' }}
+                showSearch
+                optionFilterProp="children"
+                allowClear
+              >
+                {classSubjectsData?.map((cs: any) => (
+                  <Select.Option key={cs.subject.id} value={cs.subject.id}>
+                    {cs.subject.name}
+                  </Select.Option>
+                ))}
+              </Select>
+            </Col>
+          </Row>
+        )}
+      </GlassCard>
+
+      {selectedClass && selectedSemester && selectedAcademicYear ? (
+        <GlassCard variant="glass" styles={{ body: { padding: '24px' } }}>
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <h3 className="flex items-center gap-2 text-lg font-semibold text-foreground">
+                <Users className="h-5 w-5 text-role-primary" aria-hidden="true" />
+                {classesData?.find((c: any) => c.id === selectedClass)?.name || 'Classe'}
+                {' — '}
+                {semestersData?.find((s: any) => s.id === selectedSemester)?.name || 'Trimestre'}
+              </h3>
+              <Text type="secondary" className="mt-2 block">
+                Notes et moyennes par matière
+              </Text>
+            </div>
+            {selectedSubject && (
+              <Button
+                type="primary"
+                icon={<FileDown className="h-4 w-4" aria-hidden="true" />}
+                onClick={handleExportPDF}
+              >
+                Exporter en PDF
+              </Button>
+            )}
+          </div>
+
+          {studentGrades.length > 0 ? (
+            <Table
+              columns={columns}
+              dataSource={studentGrades}
+              rowKey="studentId"
+              loading={gradesLoading}
+              pagination={false}
+              scroll={{ x: 'max-content' }}
+            />
+          ) : (
+            <EmptyState
+              icon={BookOpen}
+              title="Aucune note disponible"
+              description="Aucune note pour cette classe et ce trimestre."
+            />
+          )}
+        </GlassCard>
+      ) : (
+        <EmptyState
+          icon={BookOpen}
+          title="Sélectionnez les filtres"
+          description="Veuillez sélectionner une année, une classe et un trimestre pour afficher les notes."
+        />
+      )}
+    </div>
+  );
+}
+

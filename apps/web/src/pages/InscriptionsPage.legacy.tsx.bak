@@ -1,0 +1,378 @@
+import { useEffect, useState } from 'react';
+import {
+  Table,
+  Button,
+  Modal,
+  Form,
+  Select,
+  Space,
+  Tag,
+  message,
+  Popconfirm,
+  Row,
+  Col,
+} from 'antd';
+import { EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { AlertTriangle, CheckCircle2, FilePlus, Plus, Search } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '../lib/api';
+import { Input } from 'antd';
+import { PageHeader } from '../components/ui/page-header';
+import { GlassCard } from '../components/ui/glass-card';
+import { EmptyState } from '../components/ui/empty-state';
+import { PaginationBar } from '../components/pedagogy/PaginationBar';
+
+export default function InscriptionsPage() {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingInscription, setEditingInscription] = useState<any>(null);
+  const [searchText, setSearchText] = useState('');
+  const [pagination, setPagination] = useState({ current: 1, pageSize: 10 });
+  const [form] = Form.useForm();
+  const queryClient = useQueryClient();
+
+  const { data: academicYearsData } = useQuery({
+    queryKey: ['academic-years'],
+    queryFn: async () => {
+      const response = await api.get('/academic-years');
+      return response.data.data || [];
+    },
+  });
+
+  const currentYear = academicYearsData?.find((y: any) => y.isCurrent);
+
+  const { data: classesData } = useQuery({
+    queryKey: ['school-classes'],
+    queryFn: async () => {
+      const response = await api.get('/school-classes');
+      return response.data.data || [];
+    },
+  });
+
+  // Fetched in the background to populate the student picker - not shown as a separate list
+  const { data: studentsData } = useQuery({
+    queryKey: ['students-all-for-inscriptions'],
+    queryFn: async () => {
+      const response = await api.get('/students', { params: { limit: 1000, page: 1 } });
+      return response.data?.data || [];
+    },
+  });
+
+  const { data: inscriptionsData, isLoading } = useQuery({
+    queryKey: ['inscriptions'],
+    queryFn: async () => {
+      const response = await api.get('/inscriptions');
+      return response.data.data || [];
+    },
+  });
+
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const timer = setTimeout(() => {
+      if (editingInscription) {
+        form.setFieldsValue({
+          academicYearId: editingInscription.academicYearId,
+          classId: editingInscription.classId,
+          studentId: editingInscription.studentId,
+        });
+      } else if (currentYear) {
+        form.setFieldsValue({ academicYearId: currentYear.id });
+      }
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [isModalOpen, editingInscription, currentYear, form]);
+
+  const createMutation = useMutation({
+    mutationFn: async (values: any) => {
+      const response = await api.post('/inscriptions', values);
+      return response.data;
+    },
+    onSuccess: () => {
+      message.success('Inscription créée avec succès !');
+      queryClient.invalidateQueries({ queryKey: ['inscriptions'] });
+      handleCancel();
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.error || 'Erreur lors de la création');
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, values }: { id: string; values: any }) => {
+      const response = await api.patch(`/inscriptions/${id}`, values);
+      return response.data;
+    },
+    onSuccess: () => {
+      message.success('Inscription mise à jour !');
+      queryClient.invalidateQueries({ queryKey: ['inscriptions'] });
+      handleCancel();
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.error || 'Erreur');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await api.delete(`/inscriptions/${id}`);
+      return response.data;
+    },
+    onSuccess: () => {
+      message.success('Inscription supprimée !');
+      queryClient.invalidateQueries({ queryKey: ['inscriptions'] });
+    },
+    onError: (error: any) => {
+      message.error(error.response?.data?.error || 'Impossible de supprimer');
+    },
+  });
+
+  const handleCancel = () => {
+    setIsModalOpen(false);
+    setEditingInscription(null);
+    form.resetFields();
+  };
+
+  const openCreateModal = () => {
+    if (!currentYear) {
+      message.warning("Aucune année scolaire n'est définie comme en cours. Rendez-vous sur Années Scolaires.");
+      return;
+    }
+    setEditingInscription(null);
+    form.resetFields();
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (inscription: any) => {
+    setEditingInscription(inscription);
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = async () => {
+    try {
+      const values = await form.validateFields();
+      if (editingInscription) {
+        updateMutation.mutate({ id: editingInscription.id, values });
+      } else {
+        createMutation.mutate(values);
+      }
+    } catch {
+      // validation errors already surfaced inline by antd
+    }
+  };
+
+  const filteredInscriptions = (inscriptionsData || []).filter((insc: any) => {
+    if (!searchText) return true;
+    const search = searchText.toLowerCase();
+    const name = `${insc.student?.lastName || ''} ${insc.student?.firstName || ''}`.toLowerCase();
+    return name.includes(search) || insc.student?.studentNumber?.toLowerCase().includes(search);
+  });
+
+  const pagedInscriptions = filteredInscriptions.slice(
+    (pagination.current - 1) * pagination.pageSize,
+    pagination.current * pagination.pageSize,
+  );
+
+  const columns = [
+    {
+      title: 'Élève',
+      key: 'student',
+      render: (_: any, record: any) => (
+        <div>
+          <div className="font-semibold text-foreground">{record.student?.lastName} {record.student?.firstName}</div>
+          <div className="text-xs text-muted-foreground">{record.student?.studentNumber}</div>
+        </div>
+      ),
+    },
+    {
+      title: 'Classe',
+      key: 'class',
+      width: 140,
+      render: (_: any, record: any) => <Tag color="blue">{record.class?.name}</Tag>,
+    },
+    {
+      title: 'Année Scolaire',
+      key: 'academicYear',
+      width: 160,
+      render: (_: any, record: any) => (
+        <Space>
+          <span>{record.academicYear?.name}</span>
+          {record.academicYear?.isCurrent && <Tag color="gold">En cours</Tag>}
+        </Space>
+      ),
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      width: 100,
+      align: 'center' as const,
+      render: (_: any, record: any) => (
+        <Space size={0}>
+          <Button type="text" icon={<EditOutlined />} title="Modifier" onClick={() => openEditModal(record)} />
+          <Popconfirm
+            title="Supprimer cette inscription ?"
+            description="Cette action est irréversible."
+            onConfirm={() => deleteMutation.mutate(record.id)}
+            okText="Supprimer"
+            cancelText="Annuler"
+            okButtonProps={{ danger: true }}
+          >
+            <Button type="text" danger icon={<DeleteOutlined />} title="Supprimer" />
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
+
+  return (
+    <div className="animate-fade-in mx-auto max-w-7xl space-y-8">
+      <PageHeader
+        title="Inscriptions"
+        description="Inscription des élèves dans une classe pour l'année scolaire en cours"
+        action={
+          <Button type="primary" icon={<Plus className="h-4 w-4" aria-hidden="true" />} onClick={openCreateModal} size="large">
+            Nouvelle Inscription
+          </Button>
+        }
+      />
+
+      {currentYear ? (
+        <GlassCard variant="gradient" className="hover-lift" styles={{ body: { padding: 20 } }}>
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 rounded-xl bg-white/15 p-2">
+              <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div>
+              <div className="text-sm font-medium text-white/80">Année scolaire en cours</div>
+              <div className="mt-0.5 text-xl font-semibold">{currentYear.name}</div>
+              <div className="mt-1 text-sm text-white/75">
+                Les nouvelles inscriptions sont rattachées à cette année scolaire.
+              </div>
+            </div>
+          </div>
+        </GlassCard>
+      ) : (
+        <GlassCard variant="glass" className="border border-role-primary/30" styles={{ body: { padding: 20 } }}>
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 rounded-xl bg-role-primary/15 p-2">
+              <AlertTriangle className="h-5 w-5 text-role-primary" aria-hidden="true" />
+            </div>
+            <div>
+              <div className="text-sm font-medium">Aucune année scolaire n'est définie "en cours"</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                Définissez une année scolaire "en cours" depuis Années Scolaires pour pouvoir inscrire des élèves.
+              </div>
+            </div>
+          </div>
+        </GlassCard>
+      )}
+
+      <GlassCard variant="glass" styles={{ body: { padding: '24px' } }}>
+        <Row gutter={[16, 16]} style={{ marginBottom: 16 }} align="middle">
+          <Col xs={24} md={14} lg={12}>
+            <Input
+              placeholder="Rechercher un élève par nom ou matricule..."
+              prefix={<Search className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
+              value={searchText}
+              onChange={(e) => {
+                setSearchText(e.target.value);
+                setPagination((p) => ({ ...p, current: 1 }));
+              }}
+              allowClear
+            />
+          </Col>
+          <Col xs={24} md={10} lg={12}>
+            <div className="text-sm text-muted-foreground text-right">
+              {filteredInscriptions.length} inscription{filteredInscriptions.length > 1 ? 's' : ''}
+            </div>
+          </Col>
+        </Row>
+
+        {filteredInscriptions.length === 0 && !isLoading ? (
+          <EmptyState
+            icon={FilePlus}
+            title="Aucune inscription"
+            description="Inscrivez un élève déjà enregistré dans une classe pour l'année en cours."
+            actionLabel="Nouvelle Inscription"
+            onAction={openCreateModal}
+          />
+        ) : (
+          <>
+            <Table
+              dataSource={pagedInscriptions}
+              rowKey="id"
+              columns={columns}
+              loading={isLoading}
+              className="modern-table"
+              scroll={{ x: 'max-content' }}
+              pagination={false}
+            />
+            <PaginationBar
+              current={pagination.current}
+              pageSize={pagination.pageSize}
+              total={filteredInscriptions.length}
+              onChange={(page) => setPagination((p) => ({ ...p, current: page }))}
+              onPageSizeChange={(size) => setPagination({ current: 1, pageSize: size })}
+            />
+          </>
+        )}
+      </GlassCard>
+
+      <Modal
+        title={
+          <Space>
+            <FilePlus className="h-5 w-5 text-role-primary" aria-hidden="true" />
+            <span>{editingInscription ? "Modifier l'inscription" : 'Nouvelle inscription'}</span>
+          </Space>
+        }
+        open={isModalOpen}
+        onOk={handleSubmit}
+        onCancel={handleCancel}
+        okText={editingInscription ? 'Mettre à jour' : 'Inscrire'}
+        cancelText="Annuler"
+        confirmLoading={createMutation.isPending || updateMutation.isPending}
+        width={560}
+        styles={{ mask: { backdropFilter: 'blur(10px)', background: 'rgba(0,0,0,0.65)' } }}
+      >
+        <Form form={form} layout="vertical" style={{ marginTop: 24 }} preserve={false}>
+          <Form.Item
+            name="academicYearId"
+            label="Année Scolaire"
+            rules={[{ required: true, message: 'Année scolaire requise' }]}
+          >
+            <Select placeholder="Année scolaire" disabled={!editingInscription}>
+              {academicYearsData?.map((year: any) => (
+                <Select.Option key={year.id} value={year.id}>
+                  {year.name} {year.isCurrent && '(En cours)'}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <Form.Item name="classId" label="Classe" rules={[{ required: true, message: 'Classe requise' }]}>
+            <Select placeholder="Sélectionnez la classe" showSearch optionFilterProp="children">
+              {classesData?.map((cls: any) => (
+                <Select.Option key={cls.id} value={cls.id}>{cls.name}</Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <Form.Item name="studentId" label="Élève" rules={[{ required: true, message: 'Élève requis' }]}>
+            <Select
+              placeholder="Rechercher un élève..."
+              showSearch
+              optionFilterProp="children"
+              filterOption={(input, option) =>
+                (option?.children as unknown as string)?.toString().toLowerCase().includes(input.toLowerCase())
+              }
+            >
+              {(studentsData || []).map((student: any) => (
+                <Select.Option key={student.id} value={student.id}>
+                  {student.lastName} {student.firstName} — {student.studentNumber}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  );
+}

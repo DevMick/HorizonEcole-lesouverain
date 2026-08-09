@@ -1,0 +1,266 @@
+import { useQuery } from '@tanstack/react-query';
+import { Avatar, Col, List, Row, Spin, Typography } from 'antd';
+import {
+  BookOpen,
+  Calendar,
+  Clock,
+  CreditCard,
+  DollarSign,
+  TrendingUp,
+  Trophy,
+  User,
+  Users,
+} from 'lucide-react';
+import { dashboardApi } from '../lib/api';
+import { formatCurrency } from '../lib/utils';
+import { PageHeader } from '../components/ui/page-header';
+import { StatCard } from '../components/ui/stat-card';
+import { GlassCard } from '../components/ui/glass-card';
+import { EmptyState } from '../components/ui/empty-state';
+
+const { Text } = Typography;
+
+const statsConfig = [
+  { title: 'Élèves Actifs', icon: User, key: 'activeStudents' },
+  { title: 'Total Élèves', icon: Users, key: 'totalStudents' },
+  { title: 'Enseignants', icon: BookOpen, key: 'totalTeachers' },
+  { title: 'Classes', icon: Trophy, key: 'totalClasses' },
+  { title: 'Revenus Totaux', icon: DollarSign, key: 'totalRevenue', isMoney: true },
+  { title: 'Revenus du Mois', icon: TrendingUp, key: 'monthlyRevenue', isMoney: true },
+  { title: 'Paiements en Attente', icon: Clock, key: 'pendingPayments' },
+] as const;
+
+export default function DashboardPage() {
+  const { data: stats, isLoading: statsLoading } = useQuery({
+    queryKey: ['dashboard-stats'],
+    queryFn: () => dashboardApi.getStats(),
+  });
+
+  const { data: activities, isLoading: activitiesLoading } = useQuery({
+    queryKey: ['dashboard-activities'],
+    queryFn: () => dashboardApi.getActivities(),
+  });
+
+  if (statsLoading || activitiesLoading) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  const statsData = stats?.data.data || {};
+  const activitiesData = activities?.data.data || {};
+
+  return (
+    <div className="animate-fade-in mx-auto max-w-7xl space-y-8">
+      <PageHeader
+        title="Tableau de bord"
+        description="Vue d'ensemble du système de gestion scolaire"
+      />
+
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {statsConfig.map((stat) => {
+          const value = statsData[stat.key] || 0;
+          const displayValue =
+            'isMoney' in stat && stat.isMoney ? formatCurrency(value) : value;
+
+          return (
+            <StatCard
+              key={stat.key}
+              label={stat.title}
+              value={displayValue}
+              icon={stat.icon}
+            />
+          );
+        })}
+      </div>
+
+      <Row gutter={[24, 24]}>
+        <Col xs={24} lg={8}>
+          <GlassCard
+            variant="glass"
+            hover
+            className="h-full"
+            title={
+              <span className="flex items-center gap-2">
+                <User className="h-4 w-4 text-role-primary" aria-hidden="true" />
+                Nouveaux Élèves
+              </span>
+            }
+            extra={
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                {activitiesData?.recentStudents?.length || 0}
+              </span>
+            }
+          >
+            {activitiesData?.recentStudents?.length > 0 ? (
+              <List
+                dataSource={activitiesData.recentStudents}
+                renderItem={(student: {
+                  firstName?: string;
+                  lastName?: string;
+                  studentNumber?: string;
+                  createdAt: string;
+                }) => (
+                  <List.Item className="border-none px-0 py-3">
+                    <List.Item.Meta
+                      avatar={
+                        <Avatar style={{ background: 'var(--role-gradient)' }}>
+                          {student.firstName?.charAt(0)}
+                          {student.lastName?.charAt(0)}
+                        </Avatar>
+                      }
+                      title={
+                        <Text strong className="text-sm">
+                          {student.firstName} {student.lastName}
+                        </Text>
+                      }
+                      description={
+                        <div className="space-y-0.5">
+                          <Text type="secondary" className="text-xs">
+                            {student.studentNumber}
+                          </Text>
+                          <Text type="secondary" className="flex items-center gap-1 text-xs">
+                            <Calendar className="h-3 w-3" aria-hidden="true" />
+                            {new Date(student.createdAt).toLocaleDateString('fr-FR')}
+                          </Text>
+                        </div>
+                      }
+                    />
+                  </List.Item>
+                )}
+              />
+            ) : (
+              <EmptyState
+                title="Aucun nouvel élève"
+                description="Les inscriptions récentes apparaîtront ici."
+              />
+            )}
+          </GlassCard>
+        </Col>
+
+        <Col xs={24} lg={8}>
+          <GlassCard
+            variant="glass"
+            hover
+            className="h-full"
+            title={
+              <span className="flex items-center gap-2">
+                <CreditCard className="h-4 w-4 text-role-primary" aria-hidden="true" />
+                Paiements Récents
+              </span>
+            }
+            extra={
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                {activitiesData?.recentPayments?.length || 0}
+              </span>
+            }
+          >
+            {activitiesData?.recentPayments?.length > 0 ? (
+              <List
+                dataSource={activitiesData.recentPayments}
+                renderItem={(payment: {
+                  amount: number;
+                  fee?: { name?: string };
+                  student?: { firstName?: string; lastName?: string };
+                }) => (
+                  <List.Item className="border-none px-0 py-3">
+                    <List.Item.Meta
+                      avatar={
+                        <Avatar style={{ background: 'var(--role-gradient)' }}>
+                          <CreditCard className="h-4 w-4" aria-hidden="true" />
+                        </Avatar>
+                      }
+                      title={
+                        <Text strong className="text-sm">
+                          {payment.student?.firstName} {payment.student?.lastName}
+                        </Text>
+                      }
+                      description={
+                        <div className="space-y-0.5">
+                          <Text type="secondary" className="text-xs">
+                            {formatCurrency(payment.amount)}
+                          </Text>
+                          <Text type="secondary" className="text-xs">
+                            {payment.fee?.name}
+                          </Text>
+                        </div>
+                      }
+                    />
+                  </List.Item>
+                )}
+              />
+            ) : (
+              <EmptyState
+                title="Aucun paiement récent"
+                description="Les derniers paiements enregistrés s'afficheront ici."
+              />
+            )}
+          </GlassCard>
+        </Col>
+
+        <Col xs={24} lg={8}>
+          <GlassCard
+            variant="glass"
+            hover
+            className="h-full"
+            title={
+              <span className="flex items-center gap-2">
+                <Trophy className="h-4 w-4 text-role-primary" aria-hidden="true" />
+                Notes Récentes
+              </span>
+            }
+            extra={
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                {activitiesData?.recentGrades?.length || 0}
+              </span>
+            }
+          >
+            {activitiesData?.recentGrades?.length > 0 ? (
+              <List
+                dataSource={activitiesData.recentGrades}
+                renderItem={(grade: {
+                  value: number;
+                  maxValue: number;
+                  subject?: { name?: string };
+                  student?: { firstName?: string; lastName?: string };
+                }) => (
+                  <List.Item className="border-none px-0 py-3">
+                    <List.Item.Meta
+                      avatar={
+                        <Avatar style={{ background: 'var(--role-gradient)' }}>
+                          <Trophy className="h-4 w-4" aria-hidden="true" />
+                        </Avatar>
+                      }
+                      title={
+                        <Text strong className="text-sm">
+                          {grade.student?.firstName} {grade.student?.lastName}
+                        </Text>
+                      }
+                      description={
+                        <div className="space-y-0.5">
+                          <Text type="secondary" className="text-xs">
+                            {grade.subject?.name}
+                          </Text>
+                          <Text type="secondary" className="text-xs">
+                            {grade.value}/{grade.maxValue}
+                          </Text>
+                        </div>
+                      }
+                    />
+                  </List.Item>
+                )}
+              />
+            ) : (
+              <EmptyState
+                title="Aucune note récente"
+                description="Les dernières notes saisies apparaîtront ici."
+              />
+            )}
+          </GlassCard>
+        </Col>
+      </Row>
+    </div>
+  );
+}

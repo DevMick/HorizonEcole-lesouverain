@@ -1,0 +1,22 @@
+{
+  "name": "@school/config",
+  "version": "1.0.0",
+  "description": "Configuration partagée pour le système de gestion scolaire",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "dev": "tsc --watch",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@types/node": "^20.10.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  },
+  "files": [
+    "dist"
+  ]
+}

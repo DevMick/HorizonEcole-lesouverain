@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <base href="/" />
+    <script>
+      (function () {
+        try {
+          var stored = JSON.parse(localStorage.getItem('horizonecole-theme'));
+          var mode = stored?.state?.mode ?? 'system';
+          var isDark = mode === 'dark' || (mode === 'system' &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.classList.toggle('dark', isDark);
+          document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+        } catch (e) {}
+      })();
+    </script>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HorizonEcole - Gestion Scolaire</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

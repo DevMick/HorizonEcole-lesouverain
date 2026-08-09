@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "CommonJS",
+    "declaration": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+    "typeRoots": ["../node_modules/@types", "../../node_modules/@types"]
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "src/**/seed*.ts", "src/**/seeds/**", "src/create-admin.ts", "src/verify-admin.ts", "src/scripts/**"]
+}

@@ -1,0 +1,291 @@
+# Authentication Endpoints Documentation
+
+paths:
+  /api/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Se connecter avec email et mot de passe
+      description: |
+        Authentifie un utilisateur et retourne un access token JWT + un refresh token httpOnly cookie.
+        
+        **Credentials par défaut (seed):**
+        - Email: admin@souverainlarabia.edu.ci
+        - Password: admin123
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: admin@souverainlarabia.edu.ci
+              password: admin123
+      responses:
+        '200':
+          description: Login réussi
+          headers:
+            Set-Cookie:
+              description: Cookie httpOnly contenant le refresh token (expire dans 7 jours)
+              schema:
+                type: string
+                example: refreshToken=eyJhbGc...; HttpOnly; Secure; SameSite=Strict; Max-Age=604800
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              example:
+                success: true
+                data:
+                  user:
+                    id: "abc123"
+                    email: "admin@souverainlarabia.edu.ci"
+                    firstName: "Admin"
+                    lastName: "Souverain"
+                    role: "ADMIN"
+                    isActive: true
+                  accessToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                message: "Login successful"
+        '401':
+          description: Credentials invalides ou compte inactif
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidCredentials:
+                  value:
+                    success: false
+                    error: "Invalid credentials"
+                inactiveAccount:
+                  value:
+                    success: false
+                    error: "Account is inactive"
+        '400':
+          $ref: '#/components/responses/ValidationError'
+      security: [] # Endpoint public
+
+  /api/auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Créer un nouveau compte utilisateur (ADMIN uniquement)
+      description: |
+        Permet à un administrateur de créer un nouveau compte utilisateur.
+        Un audit log est automatiquement créé.
+        
+        **Permissions requises:** ADMIN
+      operationId: register
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              email: "teacher@souverainlarabia.edu.ci"
+              password: "Teacher123!"
+              firstName: "Marie"
+              lastName: "Kouassi"
+              role: "TEACHER"
+              phone: "+225 07 12 34 56 78"
+      responses:
+        '201':
+          description: Utilisateur créé avec succès
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/User'
+                  message:
+                    type: string
+                    example: "User created successfully"
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          description: Un utilisateur avec cet email existe déjà
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: "User with this email already exists"
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Obtenir les informations de l'utilisateur connecté
+      description: Retourne les détails du profil de l'utilisateur actuellement authentifié
+      operationId: getCurrentUser
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Profil utilisateur récupéré avec succès
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /api/auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Renouveler l'access token
+      description: |
+        Utilise le refresh token (cookie httpOnly) pour générer un nouvel access token.
+        Le refresh token doit être présent dans les cookies.
+      operationId: refreshToken
+      parameters:
+        - in: cookie
+          name: refreshToken
+          required: true
+          schema:
+            type: string
+          description: Refresh token JWT (automatiquement envoyé par le navigateur)
+      responses:
+        '200':
+          description: Token renouvelé avec succès
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      user:
+                        $ref: '#/components/schemas/User'
+                      accessToken:
+                        type: string
+                        description: Nouveau JWT access token
+                  message:
+                    type: string
+                    example: "Token refreshed successfully"
+        '401':
+          description: Refresh token manquant, invalide ou expiré
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                noToken:
+                  value:
+                    success: false
+                    error: "Refresh token not found"
+                invalidToken:
+                  value:
+                    success: false
+                    error: "Invalid or expired refresh token"
+      security: [] # Utilise le cookie, pas le header Authorization
+
+  /api/auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: Se déconnecter
+      description: |
+        Révoque tous les refresh tokens de l'utilisateur et supprime le cookie.
+        Un audit log est automatiquement créé.
+      operationId: logout
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Déconnexion réussie
+          headers:
+            Set-Cookie:
+              description: Cookie refreshToken supprimé
+              schema:
+                type: string
+                example: refreshToken=; Max-Age=0
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Logged out successfully"
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /api/auth/change-password:
+    post:
+      tags:
+        - Authentication
+      summary: Changer son mot de passe
+      description: |
+        Permet à un utilisateur de changer son mot de passe.
+        Tous les refresh tokens sont révoqués pour sécurité.
+        Un audit log est automatiquement créé.
+      operationId: changePassword
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+            example:
+              currentPassword: "admin123"
+              newPassword: "NewSecurePassword123!"
+      responses:
+        '200':
+          description: Mot de passe changé avec succès
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Password changed successfully. Please login again."
+        '400':
+          description: Mot de passe actuel incorrect
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: "Current password is incorrect"
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
