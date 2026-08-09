@@ -57,9 +57,9 @@ function getTransporter(): Transporter | null {
   transporter = nodemailer.createTransport({
     host,
     port,
-    secure, // true = TLS implicite (port 465), false = STARTTLS (port 587)
-    auth: { user, password },
-  });
+    secure,
+    auth: { user, pass: password },
+  } as Parameters<typeof nodemailer.createTransport>[0]);
 
   return transporter;
 }
