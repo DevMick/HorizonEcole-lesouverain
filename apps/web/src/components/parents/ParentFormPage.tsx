@@ -144,7 +144,6 @@ export function ParentFormPage(props: ParentFormPageProps) {
               <li key={s.studentId} className="ds-parent-row">
                 <span className="min-w-0">
                   <strong className="block truncate text-[.86rem] text-ds-text">{s.name}</strong>
-                  <span className="font-mono text-[.74rem] text-ds-text-tertiary">{s.studentNumber || '—'}</span>
                 </span>
                 {s.className && <span className="ds-badge ds-badge-role">{s.className}</span>}
                 <span className="ds-badge ds-badge-neutral">{RELATION_LABEL[s.relation] || s.relation}</span>

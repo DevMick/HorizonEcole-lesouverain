@@ -264,7 +264,6 @@ export default function ParentProfilePage() {
                   >
                     <span className="min-w-0">
                       <strong className="block truncate text-[.86rem] text-ds-text">{sp.student?.lastName} {sp.student?.firstName}</strong>
-                      <span className="font-mono text-[.74rem] text-ds-text-tertiary">{sp.student?.studentNumber || '—'}</span>
                     </span>
                     {sp.student?.class?.name && <span className="ds-badge ds-badge-role">{sp.student.class.name}</span>}
                     <span className="ds-badge ds-badge-neutral">{RELATION_LABEL[sp.relation] || sp.relation}</span>

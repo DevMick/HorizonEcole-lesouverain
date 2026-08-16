@@ -66,6 +66,27 @@ export default function SchoolClassesPage() {
     onError: () => toast.error('Erreur lors de la génération des classes.'),
   });
 
+  // Rattrapage du programme MENA (matières + rattachements) pour les classes
+  // déjà créées. Les nouvelles classes le reçoivent automatiquement à leur
+  // création ; ce bouton ne sert donc qu'aux classes antérieures. Idempotent.
+  const curriculumM = useMutation({
+    mutationFn: async () => (await api.post('/school-classes/curriculum/generate')).data,
+    onSuccess: (res: any) => {
+      const d = res?.data || {};
+      toast.success(
+        `${d.classesTraitees ?? 0} classe(s) traitée(s) — ` +
+        `${d.matieresCreees ?? 0} matière(s), ${d.rattachementsCrees ?? 0} rattachement(s).`,
+      );
+      if (d.classesIgnorees?.length) {
+        toast.error(`Niveau non reconnu : ${d.classesIgnorees.join(', ')}.`);
+      }
+      queryClient.invalidateQueries({ queryKey: ['school-subjects'] });
+      queryClient.invalidateQueries({ queryKey: ['assignment-subjects'] });
+      invalidate();
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.error || 'Erreur lors de la génération du programme.'),
+  });
+
   const updateM = useMutation({
     mutationFn: async ({ id, ...v }: any) => (await api.patch(`/school-classes/${id}`, v)).data,
     onSuccess: () => { toast.success('Classe modifiée.'); setFormOpen(false); invalidate(); },
@@ -129,6 +150,8 @@ export default function SchoolClassesPage() {
           icon={GraduationCap}
           primaryLabel="Générer les classes"
           onPrimary={() => setGenerateOpen(true)}
+          secondaryLabel={curriculumM.isPending ? 'Génération…' : 'Générer les matières'}
+          onSecondary={() => curriculumM.mutate()}
           search={search}
           onSearchChange={setSearch}
           searchPlaceholder="Rechercher par nom…"

@@ -6,6 +6,11 @@ import { requireRole } from '../middleware/rbac';
 import { validate } from '../middleware/validate';
 import { randomUUID } from 'crypto';
 import { syncClassToOdoo } from '../services/odoo.service';
+import {
+  generateCurriculumSafe,
+  generateCurriculumForClass,
+  generateCurriculumForAllClasses,
+} from '../services/curriculum.service';
 
 /**
  * Synchronise (best-effort) une classe vers Odoo (Facturation > Classes &
@@ -166,6 +171,11 @@ router.post(
 
       void syncClassToOdooSafe(schoolClass.id, schoolClass.name);
 
+      // Génère le programme du niveau (matières + rattachements) dans la foulée.
+      // Attendu — et non « fire-and-forget » comme la synchro Odoo — pour que
+      // l'appelant qui recharge les matières juste après voie déjà le résultat.
+      await generateCurriculumSafe(schoolClass.id, schoolClass.name);
+
       res.status(201).json({
         success: true,
         data: schoolClass,
@@ -315,6 +325,67 @@ router.delete(
         error: 'Failed to delete class',
         details: process.env.NODE_ENV === 'development' ? error.message : undefined,
       });
+    }
+  }
+);
+
+/**
+ * POST /api/school-classes/curriculum/generate
+ * Rattrapage : applique le programme MENA à toutes les classes existantes.
+ * Idempotent — relançable sans créer de doublon ni écraser un coefficient
+ * ajusté manuellement.
+ */
+router.post(
+  '/curriculum/generate',
+  authenticate,
+  requireRole('ADMIN'),
+  async (_req, res) => {
+    try {
+      const results = await generateCurriculumForAllClasses();
+      const traitees = results.filter((r) => !r.skipped);
+      res.json({
+        success: true,
+        data: {
+          classesTraitees: traitees.length,
+          classesIgnorees: results.filter((r) => r.skipped).map((r) => r.className),
+          matieresCreees: results.reduce((n, r) => n + r.subjectsCreated, 0),
+          rattachementsCrees: results.reduce((n, r) => n + r.linksCreated, 0),
+          details: results,
+        },
+        message: `Programme généré pour ${traitees.length} classe(s).`,
+      });
+    } catch (error: any) {
+      console.error('Error generating curriculum:', error);
+      res.status(500).json({ success: false, error: 'Failed to generate curriculum' });
+    }
+  }
+);
+
+/**
+ * POST /api/school-classes/:id/curriculum
+ * Applique (ou complète) le programme pour une seule classe.
+ */
+router.post(
+  '/:id/curriculum',
+  authenticate,
+  requireRole('ADMIN'),
+  async (req, res) => {
+    try {
+      const schoolClass = await prisma.schoolClass.findUnique({ where: { id: req.params.id } });
+      if (!schoolClass) {
+        return res.status(404).json({ success: false, error: 'Classe introuvable' });
+      }
+      const result = await generateCurriculumForClass(schoolClass.id, schoolClass.name);
+      res.json({
+        success: true,
+        data: result,
+        message: result.skipped
+          ? `Programme non généré : ${result.skipped}.`
+          : `${result.subjectsCreated} matière(s) créée(s), ${result.linksCreated} rattachement(s).`,
+      });
+    } catch (error: any) {
+      console.error('Error generating curriculum for class:', error);
+      res.status(500).json({ success: false, error: 'Failed to generate curriculum' });
     }
   }
 );

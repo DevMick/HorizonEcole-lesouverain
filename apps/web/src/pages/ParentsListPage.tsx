@@ -87,12 +87,14 @@ export default function ParentsListPage() {
     queryFn: async () => (await api.get('/students', { params: { limit: 1000, page: 1 } })).data,
     enabled: isFormOpen,
   });
+  // Un élève déjà rattaché à un parent — celui en cours d'édition ou un autre —
+  // n'est plus proposé au rattachement.
   const studentOptions = useMemo(
     () => (studentsData?.data || [])
-      .filter((s: any) => !linkedIds.has(s.id))
+      .filter((s: any) => !linkedIds.has(s.id) && !(s.studentParents?.length > 0))
       .map((s: any) => ({
         id: s.id,
-        label: `${s.lastName ?? ''} ${s.firstName ?? ''}${s.studentNumber ? ` (${s.studentNumber})` : ''}`.trim(),
+        label: `${s.lastName ?? ''} ${s.firstName ?? ''}`.trim(),
       })),
     [studentsData, linkedIds],
   );
