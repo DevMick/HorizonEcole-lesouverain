@@ -16,7 +16,7 @@ import {
   ShieldCheck,
   Users,
 } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, FILE_BASE } from '../lib/api';
 import { useAuthStore } from '../lib/store';
 import { searchable, studentName } from '../lib/utils';
 import { Button, Card, Modal, SearchInput, Skeleton, toast } from '../components/ds';
@@ -70,9 +70,6 @@ interface Settings {
   periodMinutes: number;
   coefficient: number;
 }
-
-/** Origine des fichiers servis (`/uploads/...`), sans le suffixe `/api`. */
-const FILE_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:4001/api').replace(/\/api\/?$/, '');
 
 const sexe = (g: string) =>
   ['M', 'MALE', 'Masculin'].includes(g) ? 'M' : ['F', 'FEMALE', 'Féminin'].includes(g) ? 'F' : g || '-';

@@ -2,6 +2,13 @@ import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4001/api';
 
+// Origin that serves uploaded files (/uploads/...). Behind nginx the SPA, the
+// API and the uploads share a single origin, so this is VITE_API_URL without
+// its trailing /api. Never hardcode a host here: an absolute http://localhost
+// URL is unreachable from a user's browser and is blocked as mixed content on
+// an HTTPS page.
+export const FILE_BASE = API_URL.replace(/\/api\/?$/, '');
+
 // Create axios instance
 export const api = axios.create({
   baseURL: API_URL,

@@ -6,8 +6,7 @@ import type { UploadFile } from 'antd/es/upload/interface';
 import { UploadOutlined, FilePdfOutlined, FileWordOutlined, FileImageOutlined, FileOutlined } from '@ant-design/icons';
 import { ArrowLeft } from 'lucide-react';
 import { Button, Card } from '../ds';
-
-const API_BASE = 'http://localhost:4001';
+import { FILE_BASE } from '../../lib/api';
 
 const getFileIcon = (filename: string) => {
   const ext = filename.split('.').pop()?.toLowerCase();
@@ -130,7 +129,7 @@ export function StudentFormPage(props: StudentFormPageProps) {
                   const filename = attachment.split('/').pop() || 'document';
                   return (
                     <AntList.Item actions={[
-                      <AntButton key="view" type="link" size="small" href={`${API_BASE}${attachment}`} target="_blank">Voir</AntButton>,
+                      <AntButton key="view" type="link" size="small" href={`${FILE_BASE}${attachment}`} target="_blank">Voir</AntButton>,
                       <AntButton key="remove" type="link" danger size="small" onClick={() => onRemoveAttachment(attachment)}>Retirer</AntButton>,
                     ]}><Space>{getFileIcon(filename)}{filename}</Space></AntList.Item>
                   );

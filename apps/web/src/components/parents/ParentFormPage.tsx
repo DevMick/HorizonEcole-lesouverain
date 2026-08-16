@@ -7,8 +7,6 @@ import { UploadOutlined, FilePdfOutlined, FileWordOutlined, FileImageOutlined, F
 import { ArrowLeft, Trash2 } from 'lucide-react';
 import { Button, Card } from '../ds';
 
-const API_BASE = 'http://localhost:4001';
-
 const getFileIcon = (filename: string) => {
   const ext = filename.split('.').pop()?.toLowerCase();
   if (ext === 'pdf') return <FilePdfOutlined style={{ color: '#dc2626', fontSize: 20 }} />;

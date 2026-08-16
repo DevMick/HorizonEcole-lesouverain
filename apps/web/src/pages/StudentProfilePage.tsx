@@ -5,10 +5,8 @@ import {
   ArrowLeft, FileImage, FileOutput, FileText, FileType,
   KeyRound, Copy, Check, Eye, EyeOff, RefreshCw, UserPlus, ShieldCheck, ShieldAlert,
 } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, FILE_BASE } from '../lib/api';
 import { Button, Card, Skeleton, Tabs, toast } from '../components/ds';
-
-const API_BASE = 'http://localhost:4001';
 
 const AVATAR_COLORS = ['#34478F', '#217A54', '#CC8722', '#B92C3C', '#2C689F', '#4A5FA8'];
 function colorFor(seed: string) {
@@ -135,7 +133,7 @@ export default function StudentProfilePage() {
   const hasAccount = !!student?.userId;
   const accountActive = !!student?.user?.isActive;
   const accountLogin = student?.user?.email || '';
-  const attachments: { name: string; url: string }[] = (student?.attachments || []).map((a: string) => ({ name: a.split('/').pop() || 'document', url: `${API_BASE}${a}` }));
+  const attachments: { name: string; url: string }[] = (student?.attachments || []).map((a: string) => ({ name: a.split('/').pop() || 'document', url: `${FILE_BASE}${a}` }));
 
   return (
     <div className="animate-fade-in mx-auto max-w-3xl">
