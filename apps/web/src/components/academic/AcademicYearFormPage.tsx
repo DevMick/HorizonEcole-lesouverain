@@ -56,7 +56,12 @@ export function AcademicYearFormPage(props: AcademicYearFormPageProps) {
                 label="Année de début"
                 rules={[{ required: true, message: 'Année de début requise' }]}
               >
-                <DatePicker picker="year" placeholder="Ex : 2025" style={{ width: '100%' }} />
+                <DatePicker
+                  picker="year"
+                  placeholder="Ex : 2025"
+                  style={{ width: '100%' }}
+                  placement="bottomLeft"
+                />
               </Form.Item>
             </Col>
             <Col span={12}>
@@ -65,7 +70,12 @@ export function AcademicYearFormPage(props: AcademicYearFormPageProps) {
                 label="Année de fin"
                 rules={[{ required: true, message: 'Année de fin requise' }]}
               >
-                <DatePicker picker="year" placeholder="Ex : 2026" style={{ width: '100%' }} />
+                <DatePicker
+                  picker="year"
+                  placeholder="Ex : 2026"
+                  style={{ width: '100%' }}
+                  placement="bottomLeft"
+                />
               </Form.Item>
             </Col>
           </Row>

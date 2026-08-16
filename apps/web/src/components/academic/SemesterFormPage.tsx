@@ -5,6 +5,7 @@ import type { FormInstance } from 'antd/es/form';
 import dayjs from 'dayjs';
 import { ArrowLeft } from 'lucide-react';
 import { Button, Card } from '../ds';
+import { DATE_FORMAT } from '../../lib/antd-popup';
 
 /** Une année scolaire compte 3 trimestres — liste fixe plutôt que saisie libre. */
 export const SEMESTER_NAME_OPTIONS = ['1er Trimestre', '2ème Trimestre', '3ème Trimestre'];
@@ -39,7 +40,11 @@ export function SemesterFormPage(props: SemesterFormPageProps) {
   })();
 
   return (
-    <div className="mx-auto max-w-3xl">
+    // Marge basse volontairement généreuse : les deux derniers champs sont des
+    // dates, et le calendrier fait ~350px. Sans cette réserve, antd manque de
+    // place sous le champ, bascule le panneau vers le haut et recouvre tout le
+    // formulaire. La barre d'actions étant collante, cet espace ne se voit pas.
+    <div className="mx-auto max-w-3xl pb-[380px]">
       <div className="mb-5 flex items-center gap-3">
         <Button variant="ghost" size="sm" iconOnly icon={<ArrowLeft aria-hidden />} aria-label="Retour à la liste" onClick={onCancel} />
         <div>
@@ -76,7 +81,12 @@ export function SemesterFormPage(props: SemesterFormPageProps) {
                 label="Date de début" 
                 rules={[{ required: true, message: 'Date de début requise' }]}
               >
-                <DatePicker placeholder="Date de début" style={{ width: '100%' }} />
+                <DatePicker
+                  placeholder="Date de début"
+                  style={{ width: '100%' }}
+                  format={DATE_FORMAT}
+                  placement="bottomLeft"
+                />
               </Form.Item>
             </Col>
             <Col span={12}>
@@ -85,7 +95,12 @@ export function SemesterFormPage(props: SemesterFormPageProps) {
                 label="Date de fin" 
                 rules={[{ required: true, message: 'Date de fin requise' }]}
               >
-                <DatePicker placeholder="Date de fin" style={{ width: '100%' }} />
+                <DatePicker
+                  placeholder="Date de fin"
+                  style={{ width: '100%' }}
+                  format={DATE_FORMAT}
+                  placement="bottomLeft"
+                />
               </Form.Item>
             </Col>
           </Row>

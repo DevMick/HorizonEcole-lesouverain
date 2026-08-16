@@ -44,7 +44,8 @@ class ErrorBoundary extends Component<Props, State> {
 
   private handleReset = () => {
     this.setState({ hasError: false, error: null });
-    window.location.href = '/';
+    // BASE_URL plutôt que « / » : la racine du domaine sert Odoo, pas la SPA.
+    window.location.href = import.meta.env.BASE_URL || '/';
   };
 
   public render() {

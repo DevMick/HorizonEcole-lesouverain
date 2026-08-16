@@ -94,9 +94,12 @@ api.interceptors.response.use(
       localStorage.removeItem('user');
       localStorage.removeItem('auth-storage');
       
-      // Redirect to login after a short delay
+      // Redirect to login after a short delay.
+      // BASE_URL (« /app/ » en production, « / » en dev) est indispensable :
+      // une redirection en dur vers « /login » enverrait l'utilisateur sur la
+      // page de connexion d'Odoo, servie à la racine du même domaine.
       setTimeout(() => {
-        window.location.href = '/login';
+        window.location.href = `${import.meta.env.BASE_URL}login`.replace(/\/{2,}/g, '/');
         isRedirecting = false;
       }, 100);
     }
