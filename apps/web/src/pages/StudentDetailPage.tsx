@@ -1,7 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Button, Col, Spin, Tabs, Typography } from 'antd';
-import { ArrowLeft, Calendar, Edit, Mail, MapPin, Phone } from 'lucide-react';
+import { ArrowLeft, Calendar, Edit, ExternalLink, FileText, Mail, MapPin, Phone } from 'lucide-react';
 import { studentsApi } from '../lib/api';
 import { formatDate, calculateAge } from '../lib/utils';
 import { PersonDetailHeader } from '../components/ui/person-detail-header';
@@ -52,6 +52,14 @@ export default function StudentDetailPage() {
   }
 
   const initials = `${student.firstName?.charAt(0) ?? ''}${student.lastName?.charAt(0) ?? ''}`;
+
+  // Mêmes documents que ceux exposés par StudentDetailDrawer : le formulaire élève
+  // renseigne ces trois URLs, l'API les renvoie avec la fiche.
+  const documents = [
+    { label: 'Acte de naissance', url: student.birthCertificateUrl },
+    { label: 'Carnet de vaccination', url: student.vaccinationCardUrl },
+    { label: "Bulletin de l'école précédente", url: student.previousSchoolReportUrl },
+  ].filter((doc): doc is { label: string; url: string } => Boolean(doc.url));
 
   return (
     <div className="mx-auto max-w-5xl space-y-8 animate-fade-in">
@@ -160,7 +168,32 @@ export default function StudentDetailPage() {
             label: 'Documents',
             children: (
               <GlassCard variant="glass">
-                <Text type="secondary">Aucun document associé pour le moment.</Text>
+                {documents.length > 0 ? (
+                  <ul className="divide-y divide-border">
+                    {documents.map((doc) => (
+                      <li
+                        key={doc.label}
+                        className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                      >
+                        <span className="inline-flex items-center gap-2 text-sm text-foreground">
+                          <FileText className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                          {doc.label}
+                        </span>
+                        <a
+                          href={doc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                        >
+                          Consulter
+                          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <Text type="secondary">Aucun document associé pour le moment.</Text>
+                )}
               </GlassCard>
             ),
           },
