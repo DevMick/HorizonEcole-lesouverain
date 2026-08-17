@@ -540,10 +540,15 @@
 
   /* --- En-tête : logo, marque, sous-titre, filet d'accent --- */
   .login-he-header { text-align: center; }
+  /* Emblème et nom sur une même ligne, centrés ensemble. */
+  .login-he-brand {
+    display: flex; align-items: center; justify-content: center;
+    gap: 14px; margin-bottom: 10px;
+  }
   /* Porte désormais l'emblème : plus de pastille colorée ni d'ombre, l'image
      apporte ses propres couleurs et se découpe sur le fond de page. */
   .login-he-logo {
-    width: 72px; height: 72px; margin: 0 auto 14px;
+    width: 64px; height: 64px; flex: none; margin: 0;
     display: flex; align-items: center; justify-content: center;
     border: 0; padding: 0; cursor: pointer;
     background: transparent;
@@ -635,6 +640,9 @@
   @media (max-width: 480px) {
     .login-he-card { padding: 24px 20px; }
     .login-he-title { font-size: 1.6rem; }
+    /* Emblème et nom restant côte à côte, on resserre pour tenir sur 375px. */
+    .login-he-logo { width: 52px; height: 52px; }
+    .login-he-brand { gap: 10px; }
     .login-he-toolbar { top: 14px; right: 14px; }
   }
 
