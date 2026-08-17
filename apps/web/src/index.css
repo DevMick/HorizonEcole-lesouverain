@@ -1447,7 +1447,10 @@
   .ds-brand-logo { width: 34px; height: 34px; flex: none; object-fit: contain; display: block; }
   .ds-brand-text { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
   .ds-brand-text strong { font-family: var(--font-display); font-size: 1.02rem; font-weight: 700; }
-  .ds-brand-text span { font-size: .72rem; color: var(--text-tertiary); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* Enfant direct : sans le « > », cette règle attrapait aussi les <span> de
+     la marque deux tons (imbriqués dans le <strong>) et les rendait gris et
+     minuscules — sa spécificité l'emportant sur .ds-brand-horizon/-ecole. */
+  .ds-brand-text > span { font-size: .72rem; color: var(--text-tertiary); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .ds-nav { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding-right: 2px; }
   .ds-nav-group-label { font-size: .68rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--text-tertiary); padding: 10px 10px 2px; }
