@@ -2,7 +2,13 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <base href="/" />
+    <!-- Pas de <base> : l'application est servie sous /app/ en production et
+         sous / en développement. Un <base href="/"> en dur ferait pointer
+         toute URL relative vers la racine du domaine — donc vers Odoo — et
+         casserait aussi les références de fragment (#id) des sprites SVG.
+         Vite génère de toute façon des chemins absolus préfixés par la base,
+         et le routeur s'appuie sur son propre `basename`. -->
+
     <script>
       (function () {
         try {
