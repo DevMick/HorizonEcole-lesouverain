@@ -23,7 +23,7 @@ import AuthProvider from './components/AuthProvider.tsx'
 dayjs.locale('fr')
 import { ThemeProvider } from './components/theme/ThemeProvider.tsx'
 import ErrorBoundary from './components/ErrorBoundary.tsx'
-import faviconImage from './assets/images/Image.png?url'
+import faviconImage from './assets/images/logo-horizonecole.png?url'
 import './index.css'
 
 // Configuration du favicon dynamiquement

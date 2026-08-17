@@ -540,18 +540,17 @@
 
   /* --- En-tête : logo, marque, sous-titre, filet d'accent --- */
   .login-he-header { text-align: center; }
+  /* Porte désormais l'emblème : plus de pastille colorée ni d'ombre, l'image
+     apporte ses propres couleurs et se découpe sur le fond de page. */
   .login-he-logo {
-    width: 60px; height: 60px; margin: 0 auto 14px;
+    width: 72px; height: 72px; margin: 0 auto 14px;
     display: flex; align-items: center; justify-content: center;
-    border: 0; cursor: pointer;
-    border-radius: var(--radius-md);
-    background: linear-gradient(155deg, var(--role-accent), var(--role-accent-700));
-    color: #fff;
-    font-family: var(--font-display); font-size: 1.35rem; font-weight: 700; letter-spacing: .02em;
-    box-shadow: var(--shadow-md);
-    transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+    border: 0; padding: 0; cursor: pointer;
+    background: transparent;
+    transition: transform var(--dur-fast) var(--ease-out);
   }
-  .login-he-logo:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+  .login-he-logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .login-he-logo:hover { transform: translateY(-2px); }
   .login-he-logo:focus-visible { outline: 2px solid var(--role-accent); outline-offset: 3px; }
   .login-he-title {
     margin: 0;
@@ -1421,6 +1420,13 @@
     position: sticky; top: 0; height: 100vh; overflow: hidden auto; z-index: 40;
     transition: transform var(--dur-base) var(--ease-out);
   }
+  /* Marque deux tons — teintes fixes, indépendantes de l'accent de rôle. */
+  .ds-brand-horizon { color: #171F3F; }
+  .ds-brand-ecole   { color: #E8A33D; }
+  /* Sur fond sombre le bleu nuit devient illisible : on l'éclaircit. */
+  .dark .ds-brand-horizon,
+  [data-theme="dark"] .ds-brand-horizon { color: #E7EBF4; }
+
   .ds-brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 8px; }
   .ds-brand-mark {
     width: 34px; height: 34px; flex: none; border-radius: 10px; color: #fff;
@@ -1428,6 +1434,9 @@
     display: flex; align-items: center; justify-content: center;
     font-family: var(--font-display); font-weight: 700; box-shadow: var(--shadow-sm);
   }
+  /* Logo de marque : image telle quelle, sans fond ni ombre — l'emblème porte
+     déjà ses propres couleurs. */
+  .ds-brand-logo { width: 34px; height: 34px; flex: none; object-fit: contain; display: block; }
   .ds-brand-text { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
   .ds-brand-text strong { font-family: var(--font-display); font-size: 1.02rem; font-weight: 700; }
   .ds-brand-text span { font-size: .72rem; color: var(--text-tertiary); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

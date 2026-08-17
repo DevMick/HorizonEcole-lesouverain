@@ -6,6 +6,8 @@ import { authApi } from '../lib/api';
 import { useAuthStore } from '../lib/store';
 import { roleHome } from '../lib/navigation/role-home';
 import { ThemeToggle } from '../components/theme/ThemeToggle';
+import { BrandName } from '../components/ds/BrandName';
+import logoHorizonEcole from '../assets/images/logo-horizonecole.png';
 
 interface LoginFormValues {
   email: string;
@@ -109,9 +111,9 @@ export default function LoginPage() {
             onClick={() => navigate('/')}
             aria-label="Accueil HorizonEcole"
           >
-            HE
+            <img src={logoHorizonEcole} alt="" aria-hidden />
           </button>
-          <h1 className="login-he-title">HorizonEcole</h1>
+          <h1 className="login-he-title"><BrandName /></h1>
           <p className="login-he-subtitle">Connectez-vous à votre espace de gestion</p>
           <span className="login-he-accent-bar" aria-hidden="true" />
         </header>

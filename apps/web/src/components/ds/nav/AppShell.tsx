@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { GraduationCap } from 'lucide-react';
 import { cn } from '../../../lib/utils';
+import { BrandName } from '../BrandName';
+import logoHorizonEcole from '../../../assets/images/logo-horizonecole.png';
 import { AppSidebar } from './AppSidebar';
 import { AppTopbar } from './AppTopbar';
 import { MobileTabbar } from './MobileTabbar';
@@ -53,11 +54,13 @@ export function AppShell({
 
   const brand = (
     <div className="ds-brand">
-      <div className="ds-brand-mark" aria-hidden>
-        <GraduationCap width={18} height={18} />
-      </div>
+      <img className="ds-brand-logo" src={logoHorizonEcole} alt="" aria-hidden width={34} height={34} />
       <div className="ds-brand-text">
-        <strong>{brandTitle}</strong>
+        {/* brandTitle reste surchargeable ; sans surcharge on rend la marque
+            deux tons plutôt qu'un texte monochrome. */}
+        <strong>
+          {brandTitle === 'HorizonEcole' ? <BrandName /> : brandTitle}
+        </strong>
         <span>{brandSubtitle}</span>
       </div>
     </div>
