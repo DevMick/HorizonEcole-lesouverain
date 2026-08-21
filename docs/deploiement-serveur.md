@@ -88,7 +88,45 @@ log_handler = odoo.addons.base.models.ir_http:DEBUG
 
 ---
 
-## 3. Odoo lié à localhost uniquement
+## 3. Au moins 4 workers Odoo — sinon l'impression PDF s'interbloque
+
+**Symptôme si insuffisant :** la page `/report/pdf/...` tourne indéfiniment, et
+tout Odoo se fige derrière (« Ne quittez pas encore, ça charge toujours… »).
+Aucune erreur : les processus attendent, simplement.
+
+**Cause :** pour rendre l'en-tête et le pied de page, wkhtmltopdf **rappelle
+Odoo en HTTP** afin de récupérer les feuilles de style. Une impression consomme
+donc au minimum deux workers — un qui traite la requête et attend la fin de
+wkhtmltopdf, un autre qui sert les assets à ce dernier. Avec `workers = 2`, deux
+impressions simultanées bloquent les deux workers, chacun attendant un wkhtmltopdf
+qui attend lui-même un worker libre. Personne n'avance.
+
+À noter : le problème n'apparaît **qu'une fois wkhtmltopdf correctement installé**
+(section 1). Avec la version non patchée, l'en-tête est ignoré, wkhtmltopdf ne
+rappelle jamais le serveur, et l'interblocage reste invisible.
+
+Dans `/etc/odoo/odoo.conf` :
+
+```
+workers = 4
+```
+
+Quatre est un plancher, pas un optimum : un pour la requête, un pour les assets,
+deux de marge pour l'interface. Chaque worker occupe environ 200 Mo.
+
+**Contrôle :** générer un PDF et vérifier qu'il aboutit sans laisser de processus
+derrière lui.
+
+```bash
+pgrep -x -c wkhtmltopdf      # doit valoir 0 au repos
+```
+
+Si un rendu reste figé, purger avec `pkill -x wkhtmltopdf` — jamais `pkill -f`,
+qui matcherait aussi la commande shell contenant le motif.
+
+---
+
+## 4. Odoo lié à localhost uniquement
 
 **Symptôme si omis :** `http://<ip>:8069` répond depuis Internet, en clair, en
 contournant nginx et TLS.
@@ -115,7 +153,7 @@ curl -m 5 http://<ip-publique>:8069/  # doit échouer
 
 ---
 
-## 4. Droits PostgreSQL après une restauration
+## 5. Droits PostgreSQL après une restauration
 
 **Symptôme si omis :** l'API renvoie `500` sur toutes les routes, avec
 `PostgresError 42501: permission denied for table users` dans
@@ -148,6 +186,7 @@ objets à l'échelle du cluster, bien au-delà de cette base.
 ```bash
 wkhtmltopdf --version | grep -q 'patched qt' && echo 'pdf ok'
 /opt/odoo/venv/bin/python -c 'import geoip2' && echo 'geoip2 ok'
+grep -qE '^workers = [4-9]' /etc/odoo/odoo.conf && echo 'workers ok'
 ss -lntp | grep -q '127.0.0.1:8069' && echo 'odoo confine ok'
 sudo -u postgres psql -d lesouverain_db -tAc \
   "SELECT COUNT(*) FROM pg_tables WHERE schemaname='public' AND tableowner<>'lesouverain';"
